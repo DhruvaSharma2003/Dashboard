@@ -841,6 +841,14 @@ fig_district_trend.update_layout(
 st.plotly_chart(fig_district_trend, use_container_width=True)
 
 
+with open("India_Shapefile/INDIA_STATES.geojson", "r") as f:
+    india_states_geojson = json.load(f)
+
+# Print keys of first feature
+first_feature = india_states_geojson["features"][0]
+print(first_feature["properties"].keys())
+print(first_feature["properties"])
+
 
 
 
