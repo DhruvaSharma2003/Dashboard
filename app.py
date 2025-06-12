@@ -895,6 +895,111 @@ def show_india_timelapse_map(df, geojson_path, metric_title="Production", defaul
     st.plotly_chart(fig, use_container_width=True)
 
 
+import streamlit as st
+import pandas as pd
+import json
+import plotly.express as px
+
+def show_india_pulses_map(season, pulse_type, metric_name, xlsx_path, geojson_path):
+    # Load GeoJSON
+    with open(geojson_path, "r") as f:
+        india_states_geojson = json.load(f)
+
+    # Determine sheet name → directly pulse_type
+    sheet_name = pulse_type
+
+    # Load sheet → skip first row (extra header row)
+    df_raw = pd.read_excel(xlsx_path, sheet_name=sheet_name, skiprows=1)
+
+    # Rename columns
+    df_raw.rename(columns={
+        "Data Status": "State",
+        "Unnamed: 1": "Crop",
+        "Unnamed: 2": "Year"
+    }, inplace=True)
+
+    # Clean Year column → take first year from "1950-1951"
+    df_raw["Year"] = df_raw["Year"].astype(str).str.split("-").str[0].astype(int)
+
+    # Filter by Season
+    df_filtered = df_raw[df_raw["Season"] == season]
+
+    # Keep only required columns
+    df = df_filtered[["State", "Year", metric_name]].copy()
+    df.rename(columns={metric_name: "Value"}, inplace=True)
+
+    # Add Unit column
+    df["Unit"] = "'000 Tonnes'"
+
+    # Plot choropleth
+    fig = px.choropleth(
+        df,
+        geojson=india_states_geojson,
+        locations="State",
+        featureidkey="properties.STNAME",
+        color="Value",
+        hover_name="State",
+        animation_frame="Year",
+        color_continuous_scale="YlGnBu",
+        title=f"{pulse_type} - {metric_name} ({season}) Over Time"
+    )
+
+    fig.update_geos(fitbounds="locations", visible=False)
+    fig.update_layout(
+        coloraxis_colorbar=dict(title="'000 Tonnes'"),
+        margin={"r": 0, "t": 40, "l": 0, "b": 0},
+        updatemenus=[{
+            "type": "buttons",
+            "buttons": [ 
+                {
+                    "label": "Play",
+                    "method": "animate",
+                    "args": [None, {
+                        "frame": {"duration": 100, "redraw": True},
+                        "fromcurrent": True,
+                        "transition": {"duration": 1, "easing": "linear"}
+                    }]
+                },
+                {
+                    "label": "Pause",
+                    "method": "animate",
+                    "args": [[None], {
+                        "mode": "immediate",
+                        "frame": {"duration": 0},
+                        "transition": {"duration": 10}
+                    }]
+                }
+            ]
+        }]
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+# Sidebar Inputs
+st.sidebar.markdown("### 🌱 Pulses Map Settings")
+
+season = st.sidebar.selectbox("Select Season", ["Kharif", "Rabi", "Total"])
+pulse_type = st.sidebar.selectbox("Select Pulse Type", [
+    "Arhar", "Gram", "Urad", "Moong", "Masoor", "Moth", "Kulthi", "Khesari", "Peas"
+])
+metric_name = st.sidebar.selectbox("Select Metric", ["Area", "Production", "Yield"])
+
+# Main Display
+st.markdown("---")
+st.subheader(f"🇮🇳 Pulses Map - {pulse_type} ({season}) - {metric_name}")
+
+# Show Map
+show_india_pulses_map(
+    season=season,
+    pulse_type=pulse_type,
+    metric_name=metric_name,
+    xlsx_path="Pulses_Data.xlsx",
+    geojson_path="India_Shapefile/INDIA_STATES.geojson"
+)
+
+
+
 
 
 
