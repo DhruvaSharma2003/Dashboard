@@ -421,7 +421,7 @@ try:
 
     # Clean columns → very important!
     df_selected_year["State"] = df_selected_year["State"].str.strip().str.upper()
-    gdf["STNAME"] = gdf["STNAME"].str.strip().str.upper()
+    gdf["State_Name"] = gdf["State_Name"].str.strip().str.upper()
 
     # Optional → map common name mismatches
     df_selected_year["State"] = df_selected_year["State"].replace({
@@ -436,7 +436,7 @@ try:
     })
 
     # Merge Shapefile with selected year df
-    merged = gdf.merge(df_selected_year, left_on="STNAME", right_on="State", how="left")
+    merged = gdf.merge(df_selected_year, left_on="State_Name", right_on="State", how="left")
 
     # Plot India map
     fig, ax = plt.subplots(1, 1, figsize=(10, 12))
@@ -465,7 +465,7 @@ def load_india_districts_shapefile():
     gdf = gdf.set_crs(epsg=4326, inplace=False)
     return gdf
 
-STNAME_CORRECTIONS = {
+State_Name_CORRECTIONS = {
     "Orissa": "Odisha",
     "Jammu & Kashmir": "Jammu and Kashmir",
     "Chhattisgarh": "Chhattishgarh",
@@ -481,7 +481,7 @@ STNAME_CORRECTIONS = {
 
 
 gdf_districts = load_india_districts_shapefile()
-gdf_districts["ST_NM"] = gdf_districts["ST_NM"].replace(STNAME_CORRECTIONS)
+gdf_districts["ST_NM"] = gdf_districts["ST_NM"].replace(State_Name_CORRECTIONS)
 gdf_districts["ST_NM"] = gdf_districts["ST_NM"].str.strip().str.upper()
 
 # Sidebar: State Map View
@@ -528,11 +528,11 @@ if selected_state_map != "None":
         st.error("Could not detect STATE or DISTRICT column in shapefile!")
     else:
         # Normalize function: remove spaces, convert to upper
-        def normalize_STNAME(s):
+        def normalize_State_Name(s):
             return s.upper().replace(" ", "")
 
         # Filter for selected state safely
-        state_gdf = gdf_districts[gdf_districts[state_col].apply(normalize_STNAME) == normalize_STNAME(selected_state_map)]
+        state_gdf = gdf_districts[gdf_districts[state_col].apply(normalize_State_Name) == normalize_State_Name(selected_state_map)]
 
 
         # Optional: explode in case MultiPolygon present
@@ -710,14 +710,14 @@ else:
     gdf_districts_full["Dummy_Value"] = 0.0
 
     # Process each state in df_selected_year
-    for STNAME in df_selected_year["State"].unique():
-        STNAME_upper = STNAME.strip().upper()
+    for State_Name in df_selected_year["State"].unique():
+        State_Name_upper = State_Name.strip().upper()
 
         # Match in shapefile with normalization
-        def normalize_STNAME(s):
+        def normalize_State_Name(s):
             return s.upper().replace(" ", "")
 
-        mask = gdf_districts_full[state_col].apply(normalize_STNAME) == normalize_STNAME(STNAME_upper)
+        mask = gdf_districts_full[state_col].apply(normalize_State_Name) == normalize_State_Name(State_Name_upper)
         state_gdf = gdf_districts_full[mask]
 
         # If no matching districts → skip
@@ -725,7 +725,7 @@ else:
             continue
 
         # Get state total value from df_selected_year
-        state_row = df_selected_year[df_selected_year["State"].str.upper() == STNAME_upper]
+        state_row = df_selected_year[df_selected_year["State"].str.upper() == State_Name_upper]
         if state_row.empty:
             continue
 
@@ -860,7 +860,7 @@ def show_india_timelapse_map(df, geojson_path, metric_title="Production", defaul
         df,
         geojson=india_states_geojson,
         locations="State",                        # Your CSV column name
-        featureidkey="properties.STNAME",         # Your GeoJSON property
+        featureidkey="properties.State_Name",         # Your GeoJSON property
         color="Value",
         hover_name="State",
         animation_frame="Year",
