@@ -501,10 +501,6 @@ try:
 
     df["State"] = df["State"].replace({
         "ORISSA": "ODISHA",
-        "JAMMU & KASHMIR": "JAMMU & KASHMIR",
-        "CHHATTISGARH": "CHHATTISGARH",
-        "TELANGANA": "TELANGANA",
-        "TAMIL NADU": "TAMIL NADU",
         "KERELA": "KERALA",
         "ANDAMAN & NICOBAR ISLANDS": "ANDAMAN & NICOBAR"
     })
