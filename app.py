@@ -909,7 +909,7 @@ def show_india_pulses_map(season, pulse_type, metric_name, xlsx_path, geojson_pa
     sheet_name = pulse_type
 
     # Load sheet → skip first row (extra header row)
-    df_raw = pd.read_excel(xlsx_path, sheet_name=sheet_name, skiprows=1)
+    df_raw = pd.read_excel('Data/Pulses_Data.xlsx', sheet_name=sheet_name, skiprows=1)
 
     # Rename columns
     df_raw.rename(columns={
