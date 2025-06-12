@@ -12,6 +12,10 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import folium
 from streamlit_folium import st_folium
+import matplotlib.cm as cm
+import matplotlib.colors as colors
+from folium.plugins import TimestampedGeoJson
+
 
 # Page setup
 st.set_page_config(layout="wide", page_title="India FoodCrop Dashboard", page_icon="🌾")
@@ -450,6 +454,13 @@ try:
 except Exception as e:
     st.error(f"An error occurred: {e}")
 '''
+'''
+def get_color(value, vmin, vmax):
+    norm = colors.Normalize(vmin=vmin, vmax=vmax)
+    cmap = cm.get_cmap('YlOrRd')
+    rgba = cmap(norm(value))
+    return colors.to_hex(rgba)
+'''
 # ---------- INDIA MAP VIEW ----------
 
 st.markdown("---")
@@ -464,77 +475,98 @@ with st.sidebar:
     metric = st.selectbox("Select Metric", ["Area", "Production", "Yield"])
 
 try:
+    import json
+    import matplotlib.cm as cm
+    import matplotlib.colors as colors
+    from folium.plugins import TimestampedGeoJson
+
+    # Read data
     df = pd.read_excel(
         "Data/Pulses_Data.xlsx",
         sheet_name=pulse_type,
         header=1
     )
 
+    # Clean and prepare data
     df.columns = df.columns.str.strip()
     df = df.rename(columns={"States/UTs": "State"})
     df = df[df["Season"].str.lower() == season.lower()]
     df["Year"] = df["Year"].astype(str)
     df[metric] = pd.to_numeric(df[metric], errors="coerce")
     df = df.dropna(subset=[metric])
-    df["State"] = df["State"].str.strip()
+    df["State"] = df["State"].str.strip().str.upper()
+
     df["State"] = df["State"].replace({
-        "Orissa": "Odisha",
-        "Jammu & Kashmir": "Jammu and Kashmir",
-        "Chhattisgarh": "Chhattishgarh",
-        "Telangana": "Telengana",
-        "Tamil Nadu": "Tamilnadu",
-        "Kerela": "Kerala",
-        "Andaman & Nicobar Islands": "Andaman & Nicobar"
+        "ORISSA": "ODISHA",
+        "JAMMU & KASHMIR": "JAMMU & KASHMIR",
+        "CHHATTISGARH": "CHHATTISGARH",
+        "TELANGANA": "TELANGANA",
+        "TAMIL NADU": "TAMIL NADU",
+        "KERELA": "KERALA",
+        "ANDAMAN & NICOBAR ISLANDS": "ANDAMAN & NICOBAR"
     })
 
-    selected_year = st.sidebar.selectbox("Select Year", sorted(df["Year"].unique()))
-    df_selected_year = df[df["Year"] == selected_year]
-    df_selected_year["State"] = df_selected_year["State"].str.upper()
+    # Load geojson
+    gdf_states = gpd.read_file("India_Shapefile/INDIA_STATES.geojson")
+    gdf_states["State_Name"] = gdf_states["State_Name"].str.strip().str.upper()
 
-    # Load GeoJSON instead of SHP
-    with open("India_Shapefile/INDIA_STATES.geojson", "r") as f:
-        india_states = json.load(f)
+    # Normalize color scale
+    vmin, vmax = df[metric].min(), df[metric].max()
 
-    # Normalize State names in GeoJSON
-    for feature in india_states["features"]:
-        feature["properties"]["STNAME"] = feature["properties"]["STNAME"].strip().upper()
+    def get_color(value):
+        norm = colors.Normalize(vmin=vmin, vmax=vmax)
+        cmap = cm.get_cmap('YlOrRd')
+        rgba = cmap(norm(value))
+        return colors.to_hex(rgba)
 
-    # Create a dictionary for easy lookup
-    state_metric_map = dict(zip(df_selected_year["State"], df_selected_year[metric]))
-
-    # Assign metric to each feature in GeoJSON
-    for feature in india_states["features"]:
-        STNAME = feature["properties"]["STNAME"]
-        value = state_metric_map.get(STNAME, None)
-        feature["properties"][metric] = value
-
-    # Create Folium map
+    # Create folium map
     m = folium.Map(location=[22.9734, 78.6569], zoom_start=5, tiles="CartoDB positron")
 
-    folium.Choropleth(
-        geo_data=india_states,
-        name="choropleth",
-        data=df_selected_year,
-        columns=["State", metric],
-        key_on="feature.properties.STNAME",
-        fill_color="YlOrRd",
-        fill_opacity=0.7,
-        line_opacity=0.2,
-        legend_name=f"{pulse_type} - {season} - {metric} ({selected_year})",
-        nan_fill_color="white"
+    # Build timestamped features
+    features = []
+
+    for year in sorted(df["Year"].unique()):
+        df_year = df[df["Year"] == year]
+        state_metric_map = dict(zip(df_year["State"], df_year[metric]))
+
+        for _, row in gdf_states.iterrows():
+            state_name = row["State_Name"]
+            value = state_metric_map.get(state_name, None)
+
+            feature = {
+                "type": "Feature",
+                "geometry": row["geometry"].__geo_interface__,
+                "properties": {
+                    "time": f"{year}-01-01",
+                    "style": {
+                        "color": "black",
+                        "weight": 0.3,
+                        "fillColor": "red" if value is None else get_color(value),
+                        "fillOpacity": 0.6
+                    },
+                    "popup": f"{state_name}<br>{metric}: {value:.2f}" if value is not None else f"{state_name}<br>{metric}: N/A"
+                }
+            }
+
+            features.append(feature)
+
+    # Add animated layer
+    TimestampedGeoJson({
+        "type": "FeatureCollection",
+        "features": features
+    }, 
+        period="P1Y",
+        add_last_point=True,
+        transition_time=500,
+        auto_play=False,
+        loop=False,
+        max_speed=1,
+        loop_button=True,
+        date_options="YYYY",
+        time_slider_drag_update=True
     ).add_to(m)
 
-    folium.GeoJson(
-        india_states,
-        name="Tooltip",
-        style_function=lambda x: {"fillColor": "#ffffff", "color": "#000000", "fillOpacity": 0, "weight": 0.3},
-        tooltip=folium.features.GeoJsonTooltip(
-            fields=["STNAME", metric],
-            aliases=["State:", f"{metric}:"],
-            localize=True
-        )
-    ).add_to(m)
-
+    # Display in Streamlit
     st_data = st_folium(m, width=900, height=600)
 
 except Exception as e:
