@@ -6,3 +6,5 @@ scipy
 matplotlib
 openpyxl
 geopandas
+folium
+streamlit-folium
