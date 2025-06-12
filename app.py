@@ -10,6 +10,8 @@ import json
 import numpy as np 
 import geopandas as gpd
 import matplotlib.pyplot as plt
+import folium
+from streamlit_folium import st_folium
 
 # Page setup
 st.set_page_config(layout="wide", page_title="India FoodCrop Dashboard", page_icon="🌾")
@@ -357,6 +359,7 @@ if os.path.exists(csv_path):
     st.pyplot(fig)
 
 # ---------- INDIA PULSES CHOROPLETH MAP ----------
+'''
 st.markdown("---")
 st.subheader("🇮🇳 India Pulses Choropleth Map Over Time")
 
@@ -446,7 +449,96 @@ try:
 
 except Exception as e:
     st.error(f"An error occurred: {e}")
+'''
+# ---------- INDIA MAP VIEW ----------
 
+st.markdown("---")
+st.subheader("🇮🇳 India Pulses Choropleth Map Over Time")
+
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("### 🌱 Pulses Map Settings")
+    season = st.selectbox("Select Season", ["Kharif", "Rabi", "Total"])
+    pulse_sheets = ["Gram", "Urad", "Moong", "Masoor", "Moth", "Kulthi", "Khesari", "Peas", "Arhar"]
+    pulse_type = st.selectbox("Select Pulse Type", pulse_sheets)
+    metric = st.selectbox("Select Metric", ["Area", "Production", "Yield"])
+
+try:
+    df = pd.read_excel(
+        "Data/Pulses_Data.xlsx",
+        sheet_name=pulse_type,
+        header=1
+    )
+
+    df.columns = df.columns.str.strip()
+    df = df.rename(columns={"States/UTs": "State"})
+    df = df[df["Season"].str.lower() == season.lower()]
+    df["Year"] = df["Year"].astype(str)
+    df[metric] = pd.to_numeric(df[metric], errors="coerce")
+    df = df.dropna(subset=[metric])
+    df["State"] = df["State"].str.strip()
+    df["State"] = df["State"].replace({
+        "Orissa": "Odisha",
+        "Jammu & Kashmir": "Jammu and Kashmir",
+        "Chhattisgarh": "Chhattishgarh",
+        "Telangana": "Telengana",
+        "Tamil Nadu": "Tamilnadu",
+        "Kerela": "Kerala",
+        "Andaman & Nicobar Islands": "Andaman & Nicobar"
+    })
+
+    selected_year = st.sidebar.selectbox("Select Year", sorted(df["Year"].unique()))
+    df_selected_year = df[df["Year"] == selected_year]
+    df_selected_year["State"] = df_selected_year["State"].str.upper()
+
+    # Load GeoJSON instead of SHP
+    with open("India_Shapefile/INDIA_STATES.geojson", "r") as f:
+        india_states = json.load(f)
+
+    # Normalize State names in GeoJSON
+    for feature in india_states["features"]:
+        feature["properties"]["State_Name"] = feature["properties"]["State_Name"].strip().upper()
+
+    # Create a dictionary for easy lookup
+    state_metric_map = dict(zip(df_selected_year["State"], df_selected_year[metric]))
+
+    # Assign metric to each feature in GeoJSON
+    for feature in india_states["features"]:
+        state_name = feature["properties"]["State_Name"]
+        value = state_metric_map.get(state_name, None)
+        feature["properties"][metric] = value
+
+    # Create Folium map
+    m = folium.Map(location=[22.9734, 78.6569], zoom_start=5, tiles="CartoDB positron")
+
+    folium.Choropleth(
+        geo_data=india_states,
+        name="choropleth",
+        data=df_selected_year,
+        columns=["State", metric],
+        key_on="feature.properties.State_Name",
+        fill_color="YlOrRd",
+        fill_opacity=0.7,
+        line_opacity=0.2,
+        legend_name=f"{pulse_type} - {season} - {metric} ({selected_year})",
+        nan_fill_color="white"
+    ).add_to(m)
+
+    folium.GeoJson(
+        india_states,
+        name="Tooltip",
+        style_function=lambda x: {"fillColor": "#ffffff", "color": "#000000", "fillOpacity": 0, "weight": 0.3},
+        tooltip=folium.features.GeoJsonTooltip(
+            fields=["State_Name", metric],
+            aliases=["State:", f"{metric}:"],
+            localize=True
+        )
+    ).add_to(m)
+
+    st_data = st_folium(m, width=900, height=600)
+
+except Exception as e:
+    st.error(f"An error occurred: {e}")
 
 # ---------- STATE MAP VIEW ----------
 
@@ -680,7 +772,6 @@ if selected_state_map != "None":
 
 
 # ---------- FULL INDIA DISTRICT MAP ----------
-
 st.markdown("---")
 st.subheader("🇮🇳 Full India District Map View (Fabricated Values)")
 
