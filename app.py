@@ -16,6 +16,7 @@ import matplotlib.cm as cm
 import matplotlib.colors as colors
 from folium.plugins import TimestampedGeoJson
 from streamlit.components.v1 import html
+from matplotlib import colormaps  # New API in matplotlib >=3.7
 
 
 # Page setup
@@ -455,11 +456,10 @@ try:
 except Exception as e:
     st.error(f"An error occurred: {e}")
 '''
-from matplotlib import colormaps  # New API in matplotlib >=3.7
 
 def get_color(value, vmin, vmax):
     norm = colors.Normalize(vmin=vmin, vmax=vmax)
-    cmap = colormaps['YlOrRd']
+    cmap = colormaps['viridis']
     rgba = cmap(norm(value))
     return colors.to_hex(rgba)
 
@@ -506,7 +506,14 @@ try:
     })
 
     # Load geojson
-    gdf_states = gpd.read_file("India_Shapefile/INDIA_STATES.geojson")
+    @st.cache_resource
+    def load_geojson():
+        with open("India_Shapefile/INDIA_STATES.geojson", "r") as f:
+            return json.load(f)
+
+    gdf_states = load_geojson()
+
+#    gdf_states = gpd.read_file("India_Shapefile/INDIA_STATES.geojson")
     gdf_states["STNAME"] = gdf_states["STNAME"].str.strip().str.upper()
 
     # Create folium map
