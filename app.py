@@ -573,7 +573,7 @@ except Exception as e:
     st.error(f"An error occurred: {e}")
 
 # ---------- STATE MAP VIEW ----------
-
+'''
 # Load full India District shapefile (load once → top of file / cache)
 @st.cache_data
 def load_india_districts_shapefile():
@@ -802,7 +802,6 @@ if selected_state_map != "None":
 
 
 
-
 # ---------- FULL INDIA DISTRICT MAP ----------
 st.markdown("---")
 st.subheader("🇮🇳 Full India District Map View (Fabricated Values)")
@@ -1016,7 +1015,7 @@ def show_india_timelapse_map(df, geojson_path, metric_title="Production", defaul
     )
 
     st.plotly_chart(fig, use_container_width=True)
-
+'''
 
 
 
