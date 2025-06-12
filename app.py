@@ -460,6 +460,7 @@ def get_color(value, vmin, vmax):
     cmap = cm.get_cmap('YlOrRd')
     rgba = cmap(norm(value))
     return colors.to_hex(rgba)
+
 # ---------- INDIA MAP VIEW ----------
 
 st.markdown("---")
@@ -510,21 +511,13 @@ try:
     gdf_states = gpd.read_file("India_Shapefile/INDIA_STATES.geojson")
     gdf_states["STNAME"] = gdf_states["STNAME"].str.strip().str.upper()
 
-    # Normalize color scale
-    vmin, vmax = df[metric].min(), df[metric].max()
-
-    def get_color(value):
-        norm = colors.Normalize(vmin=vmin, vmax=vmax)
-        cmap = cm.get_cmap('YlOrRd')
-        rgba = cmap(norm(value))
-        return colors.to_hex(rgba)
-
     # Create folium map
     m = folium.Map(location=[22.9734, 78.6569], zoom_start=5, tiles="CartoDB positron")
 
     # Build timestamped features
     features = []
     
+    # Normalize color scale
     vmin, vmax = df[metric].min(), df[metric].max()
 
     for year in sorted(df["Year"].unique()):
