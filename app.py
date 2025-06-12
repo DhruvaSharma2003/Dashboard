@@ -365,7 +365,6 @@ if os.path.exists(csv_path):
     st.pyplot(fig)
 
 # ---------- INDIA PULSES CHOROPLETH MAP ----------
-'''
 st.markdown("---")
 st.subheader("🇮🇳 India Pulses Choropleth Map Over Time")
 
@@ -455,127 +454,10 @@ try:
 
 except Exception as e:
     st.error(f"An error occurred: {e}")
-'''
 
-'''
-# ---------- INDIA MAP VIEW ----------
-
-st.markdown("---")
-st.subheader("🇮🇳 India Pulses Choropleth Map Over Time")
-
-with st.sidebar:
-    st.markdown("---")
-    st.markdown("### 🌱 Pulses Map Settings")
-    season = st.selectbox("Select Season", ["Kharif", "Rabi", "Total"])
-    pulse_sheets = ["Gram", "Urad", "Moong", "Masoor", "Moth", "Kulthi", "Khesari", "Peas", "Arhar"]
-    pulse_type = st.selectbox("Select Pulse Type", pulse_sheets)
-    metric = st.selectbox("Select Metric", ["Area", "Production", "Yield"])
-
-
-try:
-    import json
-    import matplotlib.cm as cm
-    import matplotlib.colors as colors
-    from folium.plugins import TimestampedGeoJson
-
-    # Read data
-    df = pd.read_excel(
-        "Data/Pulses_Data.xlsx",
-        sheet_name=pulse_type,
-        header=1
-    )
-
-    # Clean and prepare data
-    df.columns = df.columns.str.strip()
-    df = df.rename(columns={"States/UTs": "State"})
-    df = df[df["Season"].str.lower() == season.lower()]
-    df["Year"] = df["Year"].astype(str)
-    df[metric] = pd.to_numeric(df[metric], errors="coerce")
-    df = df.dropna(subset=[metric])
-    df["State"] = df["State"].str.strip().str.upper()
-
-    df["State"] = df["State"].replace({
-        "ORISSA": "ODISHA",
-        "KERELA": "KERALA",
-        "ANDAMAN & NICOBAR ISLANDS": "ANDAMAN & NICOBAR"
-    })
-
-    # Load geojson
-    @st.cache_resource
-    def load_geojson():
-        with open("India_Shapefile/INDIA_STATES.geojson", "r") as f:
-            return json.load(f)
-
-    gdf_states = load_geojson()
-
-#    gdf_states = gpd.read_file("India_Shapefile/INDIA_STATES.geojson")
-    gdf_states["STNAME"] = gdf_states["STNAME"].str.strip().str.upper()
-
-    # Create folium map
-    m = folium.Map(location=[22.9734, 78.6569], zoom_start=5, tiles="CartoDB positron")
-
-    # Build timestamped features
-    features = []
-    
-    # Normalize color scale
-    vmin, vmax = df[metric].min(), df[metric].max()
-
-    for year in sorted(df["Year"].unique()):
-        df_year = df[df["Year"] == year]
-        state_metric_map = dict(zip(df_year["State"], df_year[metric]))
-
-        for _, row in gdf_states.iterrows():
-            STNAME = row["STNAME"]
-            value = state_metric_map.get(STNAME, None)
-            # Example use of the color function
-            fill_color = get_color(value, vmin, vmax) if value is not None else "#eeeeee"
-
-
-            feature = {
-                "type": "Feature",
-                "geometry": row["geometry"].__geo_interface__,
-                "properties": {
-                    "time": f"{year}-01-01",
-                    "style": {
-                        "color": "black",
-                        "weight": 0.3,
-                        "fillColor": fill_color,
-                        "fillOpacity": 0.6
-                    },
-                    "popup": f"{STNAME}<br>{metric}: {value:.2f}" if value is not None else f"{STNAME}<br>{metric}: N/A"
-                }
-            }
-
-            features.append(feature)
-
-    # Add animated layer
-    TimestampedGeoJson({
-        "type": "FeatureCollection",
-        "features": features
-    }, 
-        period="P1Y",
-        add_last_point=True,
-        transition_time=500,
-        auto_play=False,
-        loop=False,
-        max_speed=1,
-        loop_button=True,
-        date_options="YYYY",
-        time_slider_drag_update=True
-    ).add_to(m)
-
-    # Display in Streamlit
-    try:
-        html(m._repr_html_(), height=700)
-    except Exception as e:
-        st.error("Map rendering failed.")
-        st.exception(e)
-except Exception as e:
-    st.error(f"An error occurred: {e}")
-'''
 
 # ---------- STATE MAP VIEW ----------
-'''
+
 # Load full India District shapefile (load once → top of file / cache)
 @st.cache_data
 def load_india_districts_shapefile():
@@ -1017,7 +899,6 @@ def show_india_timelapse_map(df, geojson_path, metric_title="Production", defaul
     )
 
     st.plotly_chart(fig, use_container_width=True)
-'''
 
 
 
