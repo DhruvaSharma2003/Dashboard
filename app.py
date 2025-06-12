@@ -909,26 +909,31 @@ def show_india_pulses_map(season, pulse_type, metric_name, xlsx_path, geojson_pa
     sheet_name = pulse_type
 
     # Load sheet → skip first row (extra header row)
-    df_raw = pd.read_excel('Data/Pulses_Data.xlsx', sheet_name=sheet_name, skiprows=1)
+    df_raw = pd.read_excel(xlsx_path, sheet_name=sheet_name, skiprows=1)
 
     # Rename columns
     df_raw.rename(columns={
-        "Data Status": "State",
-        "Unnamed: 1": "Crop",
-        "Unnamed: 2": "Year"
+        "States/UTs": "State",
+        # "Season" column is already correct
+        # "Crop" is not used for map
+        # "Year" is already correct
+        # "Area", "Production", "Yield" are correct
     }, inplace=True)
 
-    # Clean Year column → take first year from "1950-1951"
+    # Clean Year column → take first year from "1970-1971"
     df_raw["Year"] = df_raw["Year"].astype(str).str.split("-").str[0].astype(int)
 
     # Filter by Season
     df_filtered = df_raw[df_raw["Season"] == season]
 
+    # Filter out India row → otherwise India is not a state
+    df_filtered = df_filtered[df_filtered["State"] != "India"]
+
     # Keep only required columns
     df = df_filtered[["State", "Year", metric_name]].copy()
     df.rename(columns={metric_name: "Value"}, inplace=True)
 
-    # Add Unit column
+    # Add Unit column (optional, constant here)
     df["Unit"] = "'000 Tonnes'"
 
     # Plot choropleth
@@ -975,13 +980,18 @@ def show_india_pulses_map(season, pulse_type, metric_name, xlsx_path, geojson_pa
 
     st.plotly_chart(fig, use_container_width=True)
 
+    # Optional: Show data table checkbox
+    if st.checkbox("Show Data Table"):
+        st.dataframe(df)
+
 
 # Sidebar Inputs
 st.sidebar.markdown("### 🌱 Pulses Map Settings")
 
 season = st.sidebar.selectbox("Select Season", ["Kharif", "Rabi", "Total"])
 pulse_type = st.sidebar.selectbox("Select Pulse Type", [
-    "Arhar", "Gram", "Urad", "Moong", "Masoor", "Moth", "Kulthi", "Khesari", "Peas"
+    "Arhar", "Gram", "Urad", "Moong", "Masoor", "Moth", "Kulthi", "Khesari", "Peas",
+    "Total Kharif pulses", "Total Rabi pulses", "Total pulses"
 ])
 metric_name = st.sidebar.selectbox("Select Metric", ["Area", "Production", "Yield"])
 
@@ -994,9 +1004,10 @@ show_india_pulses_map(
     season=season,
     pulse_type=pulse_type,
     metric_name=metric_name,
-    xlsx_path="Pulses_Data.xlsx",
+    xlsx_path="Data/Pulses_Data.xlsx",
     geojson_path="India_Shapefile/INDIA_STATES.geojson"
 )
+
 
 
 
