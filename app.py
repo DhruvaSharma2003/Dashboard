@@ -455,10 +455,11 @@ try:
 except Exception as e:
     st.error(f"An error occurred: {e}")
 '''
+from matplotlib import colormaps  # New API in matplotlib >=3.7
 
 def get_color(value, vmin, vmax):
     norm = colors.Normalize(vmin=vmin, vmax=vmax)
-    cmap = cm.get_cmap('YlOrRd')
+    cmap = colormaps['YlOrRd']
     rgba = cmap(norm(value))
     return colors.to_hex(rgba)
 
@@ -566,8 +567,11 @@ try:
     ).add_to(m)
 
     # Display in Streamlit
-    st_data = st.components.v1.html(m._repr_html_(), height=700, width=1000)
-    st.write("Rendering folium map for year", year)
+    try:
+        html(m._repr_html_(), height=700)
+    except Exception as e:
+        st.error("Map rendering failed.")
+        st.exception(e)
 except Exception as e:
     st.error(f"An error occurred: {e}")
 
