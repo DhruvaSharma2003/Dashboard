@@ -356,7 +356,7 @@ if os.path.exists(csv_path):
     fig = plot_logest_growth_from_csv(csv_path, category, conversion_multiplier)
     st.pyplot(fig)
 
-# ---------- INDIA PULSES CHOROPLETH MAP ----------
+'''# ---------- INDIA PULSES CHOROPLETH MAP ----------
 st.markdown("---")
 st.subheader("🇮🇳 India Pulses Choropleth Map Over Time")
 
@@ -892,7 +892,7 @@ def show_india_timelapse_map(df, geojson_path, metric_title="Production", defaul
         }]
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True) '''
 
 
 import streamlit as st
