@@ -454,13 +454,12 @@ try:
 except Exception as e:
     st.error(f"An error occurred: {e}")
 '''
-'''
+
 def get_color(value, vmin, vmax):
     norm = colors.Normalize(vmin=vmin, vmax=vmax)
     cmap = cm.get_cmap('YlOrRd')
     rgba = cmap(norm(value))
     return colors.to_hex(rgba)
-'''
 # ---------- INDIA MAP VIEW ----------
 
 st.markdown("---")
