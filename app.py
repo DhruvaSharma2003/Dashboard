@@ -916,7 +916,7 @@ with open("India_Shapefile/INDIA_STATES.geojson", "r") as f:
 # 2️⃣ Load Excel sheet
 xlsx_path = "Data/Pulses_Data.xlsx"
 sheet_name = pulse_type
-df_raw = pd.read_excel(xlsx_path, sheet_name=sheet_name, skiprows=1)
+df_raw = pd.read_excel(xlsx_path, sheet_name=sheet_name, header=1)
 
 # 3️⃣ Rename columns
 df_raw.rename(columns={
