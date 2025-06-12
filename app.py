@@ -567,7 +567,7 @@ try:
 
     # Display in Streamlit
     st_data = st.components.v1.html(m._repr_html_(), height=700, width=1000)
-st.write("Rendering folium map for year", year)
+    st.write("Rendering folium map for year", year)
 except Exception as e:
     st.error(f"An error occurred: {e}")
 
