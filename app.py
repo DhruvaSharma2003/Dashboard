@@ -839,36 +839,60 @@ fig_district_trend.update_layout(
 )
 
 st.plotly_chart(fig_district_trend, use_container_width=True)
-'''
-import json
 
-with open("India_Shapefile/INDIA_STATES.geojson", "r") as f:
-    india_states_geojson = json.load(f)
+def show_india_timelapse_map(df, geojson_path, metric_title="Production", default_unit="Tonnes"):
+    # Load GeoJSON file
+    with open(geojson_path, "r") as f:
+        india_states_geojson = json.load(f)
 
-# Print keys of first feature
-first_feature = india_states_geojson["features"][0]
-print(first_feature["properties"].keys())
-print(first_feature["properties"])
-'''
+    # Determine unit
+    unit = df["Unit"].iloc[0] if "Unit" in df.columns and not df["Unit"].isna().all() else default_unit
+    title = f"{metric_title} Over Time ({unit})"
 
-import streamlit as st
-import json
+    # Create choropleth
+    fig = px.choropleth(
+        df,
+        geojson=india_states_geojson,
+        locations="State",                        # Your CSV column name
+        featureidkey="properties.STNAME",         # Your GeoJSON property
+        color="Value",
+        hover_name="State",
+        animation_frame="Year",
+        color_continuous_scale="YlGnBu",
+        title=title
+    )
 
-# Load GeoJSON
-with open("India_Shapefile/INDIA_STATES.geojson", "r") as f:
-    india_states_geojson = json.load(f)
+    # Layout tweaks
+    fig.update_geos(fitbounds="locations", visible=False)
+    fig.update_layout(
+        coloraxis_colorbar=dict(title=unit),
+        margin={"r": 0, "t": 40, "l": 0, "b": 0},
+        updatemenus=[{
+            "type": "buttons",
+            "buttons": [ 
+                {
+                    "label": "Play",
+                    "method": "animate",
+                    "args": [None, {
+                        "frame": {"duration": 100, "redraw": True},
+                        "fromcurrent": True,
+                        "transition": {"duration": 1, "easing": "linear"}
+                    }]
+                },
+                {
+                    "label": "Pause",
+                    "method": "animate",
+                    "args": [[None], {
+                        "mode": "immediate",
+                        "frame": {"duration": 0},
+                        "transition": {"duration": 10}
+                    }]
+                }
+            ]
+        }]
+    )
 
-# Extract first feature
-first_feature = india_states_geojson["features"][0]
-
-# Display keys and properties
-st.write("Property keys of first feature:")
-st.write(list(first_feature["properties"].keys()))
-
-st.write("Full properties of first feature:")
-st.json(first_feature["properties"])
-
-st.success("GeoJSON file loaded successfully.")
+    st.plotly_chart(fig, use_container_width=True)
 
 
 
