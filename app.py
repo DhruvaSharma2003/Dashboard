@@ -916,12 +916,11 @@ with open("India_Shapefile/INDIA_STATES.geojson", "r") as f:
 # 2️⃣ Load Excel sheet
 xlsx_path = "Data/Pulses_Data.xlsx"
 sheet_name = pulse_type
-df_raw = pd.read_excel(xlsx_path, sheet_name=sheet_name, header=1)
+df_raw = pd.read_excel(xlsx_path, sheet_name=sheet_name, skiprows=1)
 
 # 3️⃣ Rename columns
 df_raw.rename(columns={
     "States/UTs": "State",
-    # "Season", "Crop", "Year" are already correct
 }, inplace=True)
 
 # 4️⃣ Clean Year column → first year from "1970-1971"
@@ -933,12 +932,18 @@ df_filtered = df_raw[df_raw["Season"] == season]
 # 6️⃣ Remove India row
 df_filtered = df_filtered[df_filtered["State"] != "India"]
 
-# 7️⃣ Prepare final dataframe for plotting
+# 7️⃣ Strip column names to avoid KeyError
+df_filtered.columns = df_filtered.columns.str.strip()
+
+# Optional Debug → print columns to confirm
+st.write("Columns:", df_filtered.columns.tolist())
+
+# 8️⃣ Prepare final dataframe for plotting
 df = df_filtered[["State", "Year", metric_name]].copy()
 df.rename(columns={metric_name: "Value"}, inplace=True)
 df["Unit"] = "'000 Tonnes'"
 
-# 8️⃣ Plot India Choropleth
+# 9️⃣ Plot India Choropleth
 fig = px.choropleth(
     df,
     geojson=india_states_geojson,
@@ -980,12 +985,13 @@ fig.update_layout(
     }]
 )
 
-# 9️⃣ Show map
+# 🔟 Show map
 st.plotly_chart(fig, use_container_width=True)
 
 # 🔟 Optional → Show Data Table checkbox
 if st.checkbox("Show Data Table"):
     st.dataframe(df)
+
 
 
 
