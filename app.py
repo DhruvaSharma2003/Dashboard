@@ -416,7 +416,7 @@ try:
 
     # Clean columns → very important!
     df_selected_year["State"] = df_selected_year["State"].str.strip().str.upper()
-    gdf["State_Name"] = gdf["State_Name"].str.strip().str.upper()
+    gdf["STNAME"] = gdf["STNAME"].str.strip().str.upper()
 
     # Optional → map common name mismatches
     df_selected_year["State"] = df_selected_year["State"].replace({
@@ -431,7 +431,7 @@ try:
     })
 
     # Merge Shapefile with selected year df
-    merged = gdf.merge(df_selected_year, left_on="State_Name", right_on="State", how="left")
+    merged = gdf.merge(df_selected_year, left_on="STNAME", right_on="State", how="left")
 
     # Plot India map
     fig, ax = plt.subplots(1, 1, figsize=(10, 12))
@@ -497,15 +497,15 @@ try:
 
     # Normalize State names in GeoJSON
     for feature in india_states["features"]:
-        feature["properties"]["State_Name"] = feature["properties"]["State_Name"].strip().upper()
+        feature["properties"]["STNAME"] = feature["properties"]["STNAME"].strip().upper()
 
     # Create a dictionary for easy lookup
     state_metric_map = dict(zip(df_selected_year["State"], df_selected_year[metric]))
 
     # Assign metric to each feature in GeoJSON
     for feature in india_states["features"]:
-        state_name = feature["properties"]["State_Name"]
-        value = state_metric_map.get(state_name, None)
+        STNAME = feature["properties"]["STNAME"]
+        value = state_metric_map.get(STNAME, None)
         feature["properties"][metric] = value
 
     # Create Folium map
@@ -516,7 +516,7 @@ try:
         name="choropleth",
         data=df_selected_year,
         columns=["State", metric],
-        key_on="feature.properties.State_Name",
+        key_on="feature.properties.STNAME",
         fill_color="YlOrRd",
         fill_opacity=0.7,
         line_opacity=0.2,
@@ -529,7 +529,7 @@ try:
         name="Tooltip",
         style_function=lambda x: {"fillColor": "#ffffff", "color": "#000000", "fillOpacity": 0, "weight": 0.3},
         tooltip=folium.features.GeoJsonTooltip(
-            fields=["State_Name", metric],
+            fields=["STNAME", metric],
             aliases=["State:", f"{metric}:"],
             localize=True
         )
@@ -549,7 +549,7 @@ def load_india_districts_shapefile():
     gdf = gdf.set_crs(epsg=4326, inplace=False)
     return gdf
 
-STATE_NAME_CORRECTIONS = {
+STNAME_CORRECTIONS = {
     "Orissa": "Odisha",
     "Jammu & Kashmir": "Jammu and Kashmir",
     "Chhattisgarh": "Chhattishgarh",
@@ -565,7 +565,7 @@ STATE_NAME_CORRECTIONS = {
 
 
 gdf_districts = load_india_districts_shapefile()
-gdf_districts["ST_NM"] = gdf_districts["ST_NM"].replace(STATE_NAME_CORRECTIONS)
+gdf_districts["ST_NM"] = gdf_districts["ST_NM"].replace(STNAME_CORRECTIONS)
 gdf_districts["ST_NM"] = gdf_districts["ST_NM"].str.strip().str.upper()
 
 # Sidebar: State Map View
@@ -612,11 +612,11 @@ if selected_state_map != "None":
         st.error("Could not detect STATE or DISTRICT column in shapefile!")
     else:
         # Normalize function: remove spaces, convert to upper
-        def normalize_state_name(s):
+        def normalize_STNAME(s):
             return s.upper().replace(" ", "")
 
         # Filter for selected state safely
-        state_gdf = gdf_districts[gdf_districts[state_col].apply(normalize_state_name) == normalize_state_name(selected_state_map)]
+        state_gdf = gdf_districts[gdf_districts[state_col].apply(normalize_STNAME) == normalize_STNAME(selected_state_map)]
 
 
         # Optional: explode in case MultiPolygon present
@@ -795,14 +795,14 @@ else:
     gdf_districts_full["Dummy_Value"] = 0.0
 
     # Process each state in df_selected_year
-    for state_name in df_selected_year["State"].unique():
-        state_name_upper = state_name.strip().upper()
+    for STNAME in df_selected_year["State"].unique():
+        STNAME_upper = STNAME.strip().upper()
 
         # Match in shapefile with normalization
-        def normalize_state_name(s):
+        def normalize_STNAME(s):
             return s.upper().replace(" ", "")
 
-        mask = gdf_districts_full[state_col].apply(normalize_state_name) == normalize_state_name(state_name_upper)
+        mask = gdf_districts_full[state_col].apply(normalize_STNAME) == normalize_STNAME(STNAME_upper)
         state_gdf = gdf_districts_full[mask]
 
         # If no matching districts → skip
@@ -810,7 +810,7 @@ else:
             continue
 
         # Get state total value from df_selected_year
-        state_row = df_selected_year[df_selected_year["State"].str.upper() == state_name_upper]
+        state_row = df_selected_year[df_selected_year["State"].str.upper() == STNAME_upper]
         if state_row.empty:
             continue
 
