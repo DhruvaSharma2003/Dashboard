@@ -356,7 +356,7 @@ if os.path.exists(csv_path):
     fig = plot_logest_growth_from_csv(csv_path, category, conversion_multiplier)
     st.pyplot(fig)
 
-'''# ---------- INDIA PULSES CHOROPLETH MAP ----------
+# ---------- INDIA PULSES CHOROPLETH MAP ----------
 st.markdown("---")
 st.subheader("🇮🇳 India Pulses Choropleth Map Over Time")
 
@@ -892,105 +892,7 @@ def show_india_timelapse_map(df, geojson_path, metric_title="Production", defaul
         }]
     )
 
-    st.plotly_chart(fig, use_container_width=True) '''
-
-
-# Sidebar Inputs
-st.sidebar.markdown("### 🌱 Pulses Map Settings")
-
-season = st.sidebar.selectbox("Select Season", ["Kharif", "Rabi", "Total"])
-pulse_type = st.sidebar.selectbox("Select Pulse Type", [
-    "Arhar", "Gram", "Urad", "Moong", "Masoor", "Moth", "Kulthi", "Khesari", "Peas",
-    "Total Kharif pulses", "Total Rabi pulses", "Total pulses"
-])
-metric_name = st.sidebar.selectbox("Select Metric", ["Area", "Production", "Yield"])
-
-# Main Display
-st.markdown("---")
-st.subheader(f"🇮🇳 Pulses Map - {pulse_type} ({season}) - {metric_name}")
-
-# 1️⃣ Load GeoJSON
-with open("India_Shapefile/INDIA_STATES.geojson", "r") as f:
-    india_states_geojson = json.load(f)
-
-# 2️⃣ Load Excel sheet
-xlsx_path = "Data/Pulses_Data.xlsx"
-sheet_name = pulse_type
-df_raw = pd.read_excel(xlsx_path, sheet_name=sheet_name, skiprows=1)
-
-# 3️⃣ Rename columns
-df_raw.rename(columns={
-    "States/UTs": "State",
-}, inplace=True)
-
-# 4️⃣ Clean Year column → first year from "1970-1971"
-df_raw["Year"] = df_raw["Year"].astype(str).str.split("-").str[0].astype(int)
-
-# 5️⃣ Filter Season
-df_filtered = df_raw[df_raw["Season"] == season]
-
-# 6️⃣ Remove India row
-df_filtered = df_filtered[df_filtered["State"] != "India"]
-
-# 7️⃣ Strip column names to avoid KeyError
-df_filtered.columns = df_filtered.columns.str.strip()
-
-# Optional Debug → print columns to confirm
-st.write("Columns:", df_filtered.columns.tolist())
-
-# 8️⃣ Prepare final dataframe for plotting
-df = df_filtered[["State", "Year", metric_name]].copy()
-df.rename(columns={metric_name: "Value"}, inplace=True)
-df["Unit"] = "'000 Tonnes'"
-
-# 9️⃣ Plot India Choropleth
-fig = px.choropleth(
-    df,
-    geojson=india_states_geojson,
-    locations="State",
-    featureidkey="properties.STNAME",
-    color="Value",
-    hover_name="State",
-    animation_frame="Year",
-    color_continuous_scale="YlGnBu",
-    title=f"{pulse_type} - {metric_name} ({season}) Over Time"
-)
-
-fig.update_geos(fitbounds="locations", visible=False)
-fig.update_layout(
-    coloraxis_colorbar=dict(title="'000 Tonnes'"),
-    margin={"r": 0, "t": 40, "l": 0, "b": 0},
-    updatemenus=[{
-        "type": "buttons",
-        "buttons": [ 
-            {
-                "label": "Play",
-                "method": "animate",
-                "args": [None, {
-                    "frame": {"duration": 100, "redraw": True},
-                    "fromcurrent": True,
-                    "transition": {"duration": 1, "easing": "linear"}
-                }]
-            },
-            {
-                "label": "Pause",
-                "method": "animate",
-                "args": [[None], {
-                    "mode": "immediate",
-                    "frame": {"duration": 0},
-                    "transition": {"duration": 10}
-                }]
-            }
-        ]
-    }]
-)
-
-# 🔟 Show map
-st.plotly_chart(fig, use_container_width=True)
-
-# 🔟 Optional → Show Data Table checkbox
-if st.checkbox("Show Data Table"):
-    st.dataframe(df)
+    st.plotly_chart(fig, use_container_width=True)
 
 
 
