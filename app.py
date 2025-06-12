@@ -473,6 +473,7 @@ with st.sidebar:
     pulse_type = st.selectbox("Select Pulse Type", pulse_sheets)
     metric = st.selectbox("Select Metric", ["Area", "Production", "Yield"])
 
+
 try:
     import json
     import matplotlib.cm as cm
@@ -523,6 +524,8 @@ try:
 
     # Build timestamped features
     features = []
+    
+    vmin, vmax = df[metric].min(), df[metric].max()
 
     for year in sorted(df["Year"].unique()):
         df_year = df[df["Year"] == year]
@@ -531,6 +534,9 @@ try:
         for _, row in gdf_states.iterrows():
             STNAME = row["STNAME"]
             value = state_metric_map.get(STNAME, None)
+            # Example use of the color function
+            fill_color = get_color(value, vmin, vmax) if value is not None else "#eeeeee"
+
 
             feature = {
                 "type": "Feature",
@@ -540,7 +546,7 @@ try:
                     "style": {
                         "color": "black",
                         "weight": 0.3,
-                        "fillColor": "red" if value is None else get_color(value),
+                        "fillColor": fill_color,
                         "fillOpacity": 0.6
                     },
                     "popup": f"{STNAME}<br>{metric}: {value:.2f}" if value is not None else f"{STNAME}<br>{metric}: N/A"
