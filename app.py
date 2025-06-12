@@ -463,6 +463,22 @@ def get_color(value, vmin, vmax):
     rgba = cmap(norm(value))
     return colors.to_hex(rgba)
 
+import streamlit as st
+import folium
+from streamlit.components.v1 import html
+
+st.title("Minimal Folium Test")
+
+m = folium.Map(location=[22.9734, 78.6569], zoom_start=5)
+folium.Marker([28.6139, 77.2090], tooltip="Delhi").add_to(m)
+
+try:
+    html(m._repr_html_(), height=500)
+except Exception as e:
+    st.error("Map failed.")
+    st.exception(e)
+
+'''
 # ---------- INDIA MAP VIEW ----------
 
 st.markdown("---")
@@ -577,7 +593,7 @@ try:
         st.exception(e)
 except Exception as e:
     st.error(f"An error occurred: {e}")
-
+'''
 
 # ---------- STATE MAP VIEW ----------
 '''
