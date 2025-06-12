@@ -508,7 +508,7 @@ try:
 
     # Load geojson
     gdf_states = gpd.read_file("India_Shapefile/INDIA_STATES.geojson")
-    gdf_states["State_Name"] = gdf_states["State_Name"].str.strip().str.upper()
+    gdf_states["STNAME"] = gdf_states["STNAME"].str.strip().str.upper()
 
     # Normalize color scale
     vmin, vmax = df[metric].min(), df[metric].max()
@@ -530,8 +530,8 @@ try:
         state_metric_map = dict(zip(df_year["State"], df_year[metric]))
 
         for _, row in gdf_states.iterrows():
-            state_name = row["State_Name"]
-            value = state_metric_map.get(state_name, None)
+            STNAME = row["STNAME"]
+            value = state_metric_map.get(STNAME, None)
 
             feature = {
                 "type": "Feature",
@@ -544,7 +544,7 @@ try:
                         "fillColor": "red" if value is None else get_color(value),
                         "fillOpacity": 0.6
                     },
-                    "popup": f"{state_name}<br>{metric}: {value:.2f}" if value is not None else f"{state_name}<br>{metric}: N/A"
+                    "popup": f"{STNAME}<br>{metric}: {value:.2f}" if value is not None else f"{STNAME}<br>{metric}: N/A"
                 }
             }
 
