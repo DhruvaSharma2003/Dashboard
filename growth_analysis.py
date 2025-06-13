@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.stats import linregress
+import plotly.graph_objects as go
 
 def plot_logest_growth_from_csv(csv_path, category_name, scale_factor=1.0):
     # Load historical data
@@ -52,19 +52,75 @@ def plot_logest_growth_from_csv(csv_path, category_name, scale_factor=1.0):
     slope_all, _, _, _, _ = linregress(x_all, y_all)
     overall = (np.exp(slope_all) - 1) * 100
 
-    # Plotting
-    fig, ax = plt.subplots(figsize=(10, 6))
-    bars = ax.bar(decade_growth_rates.keys(), decade_growth_rates.values(), label="Decade-wise Trend Growth Rate")
-    ax.axhline(y=overall, color='red', linestyle='--', label=f'Overall Growth Rate ({overall:.2f}%)')
+    # Prepare dataframe for plotting
+    df_plot = pd.DataFrame({
+        "Decade": list(decade_growth_rates.keys()),
+        "GrowthRate": list(decade_growth_rates.values())
+    })
 
-    for bar in bars:
-        yval = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width() / 2, yval, f"{yval:.2f}%", ha='center', va='bottom')
+    # Create Plotly figure with initial empty bars
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=df_plot["Decade"], y=[0]*len(df_plot), name="Trend Growth Rate"))
 
-    ax.set_title(f"Decade-wise Trend Growth Rate for {category_name}")
-    ax.set_ylabel("Trend Growth Rate (%)")
-    ax.set_xlabel("Decade Range")
-    ax.legend()
-    plt.xticks(rotation=45)
-    plt.tight_layout()
+    # Create frames → one bar rises at a time
+    n_steps_per_bar = 10  # smoothness per bar
+    frames = []
+
+    for bar_idx in range(len(df_plot)):
+        # Bars before → full height
+        # Current bar → rising
+        # Bars after → 0
+        for step in range(1, n_steps_per_bar+1):
+            y_vals = []
+            for i in range(len(df_plot)):
+                if i < bar_idx:
+                    y_vals.append(df_plot["GrowthRate"].iloc[i])
+                elif i == bar_idx:
+                    y_vals.append(df_plot["GrowthRate"].iloc[i] * (step / n_steps_per_bar))
+                else:
+                    y_vals.append(0)
+            frame = go.Frame(
+                data=[go.Bar(x=df_plot["Decade"], y=y_vals)],
+                name=f"bar{bar_idx}_step{step}"
+            )
+            frames.append(frame)
+
+    fig.frames = frames
+
+    # Add overall growth line
+    fig.add_hline(y=overall, line_dash="dash", line_color="red", annotation_text=f"Overall Growth Rate ({overall:.2f}%)", annotation_position="top left")
+
+    # Layout with Play button
+    fig.update_layout(
+        title=f"Decade-wise Trend Growth Rate for {category_name}",
+        xaxis_title="Decade Range",
+        yaxis_title="Trend Growth Rate (%)",
+        updatemenus=[{
+            "type": "buttons",
+            "buttons": [
+                {
+                    "label": "Play",
+                    "method": "animate",
+                    "args": [None, {
+                        "frame": {"duration": 100, "redraw": True},
+                        "fromcurrent": True,
+                        "transition": {"duration": 0}
+                    }]
+                },
+                {
+                    "label": "Pause",
+                    "method": "animate",
+                    "args": [[None], {
+                        "mode": "immediate",
+                        "frame": {"duration": 0},
+                        "transition": {"duration": 0}
+                    }]
+                }
+            ]
+        }],
+        margin={"r": 40, "t": 60, "l": 40, "b": 40}
+    )
+
+    fig.update_traces(marker_color='lightskyblue')
+
     return fig
