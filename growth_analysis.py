@@ -63,7 +63,7 @@ def plot_logest_growth_from_csv(csv_path, category_name, scale_factor=1.0):
     fig.add_trace(go.Bar(x=df_plot["Decade"], y=[0]*len(df_plot), name="Trend Growth Rate"))
 
     # Create frames → one bar rises at a time
-    n_steps_per_bar = 10  # smoothness per bar
+    n_steps_per_bar = 5  # smoothness per bar
     frames = []
 
     for bar_idx in range(len(df_plot)):
@@ -95,7 +95,7 @@ def plot_logest_growth_from_csv(csv_path, category_name, scale_factor=1.0):
         title=f"Decade-wise Trend Growth Rate for {category_name}",
         xaxis_title="Decade Range",
         yaxis_title="Trend Growth Rate (%)",
-        yaxis=dict(range=[-4, 12]),
+        yaxis=dict(range=[-2, 10]),
         updatemenus=[{
             "type": "buttons",
             "buttons": [
