@@ -95,7 +95,7 @@ def plot_logest_growth_from_csv(csv_path, category_name, scale_factor=1.0):
         title=f"Decade-wise Trend Growth Rate for {category_name}",
         xaxis_title="Decade Range",
         yaxis_title="Trend Growth Rate (%)",
-        yaxis=dict(range=[0, 12]),
+        yaxis=dict(range=[-4, 12]),
         updatemenus=[{
             "type": "buttons",
             "buttons": [
