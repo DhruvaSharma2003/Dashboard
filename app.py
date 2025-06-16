@@ -325,9 +325,9 @@ if historical_df is not None and forecast_df is not None:
                 "label": "Play",
                 "method": "animate",
                 "args": [None, {
-                    "frame": {"duration": 10, "redraw": True},  # Lower = faster (ms)
+                    "frame": {"duration": 50, "redraw": True},  # Lower = faster (ms)
                     "fromcurrent": True,
-                    "transition": {"duration": 1, "easing": "linear"}
+                    "transition": {"duration": 0, "easing": "linear"}
                 }]
             }, {
                 "label": "Pause",
@@ -657,9 +657,9 @@ if selected_state_map != "None":
                                 'label': 'Play',
                                 'method': 'animate',
                                 'args': [None, {
-                                    'frame': {'duration': 10, 'redraw': True},  # << faster animation (300 ms per frame)
+                                    'frame': {'duration': 50, 'redraw': True},  # << faster animation (300 ms per frame)
                                     'fromcurrent': True,
-                                    'transition': {'duration': 1}
+                                    'transition': {'duration': 0}
                                 }]
                             }, {
                             'label': 'Pause',
@@ -826,9 +826,9 @@ fig_district_trend.update_layout(
                 'label': 'Play',
                 'method': 'animate',
                 'args': [None, {
-                    'frame': {'duration': 200, 'redraw': True},
+                    'frame': {'duration': 50, 'redraw': True},
                     'fromcurrent': True,
-                    'transition': {'duration': 100}
+                    'transition': {'duration': 0}
                 }]
             },
             {
@@ -880,9 +880,9 @@ def show_india_timelapse_map(df, geojson_path, metric_title="Production", defaul
                     "label": "Play",
                     "method": "animate",
                     "args": [None, {
-                        "frame": {"duration": 100, "redraw": True},
+                        "frame": {"duration": 50, "redraw": True},
                         "fromcurrent": True,
-                        "transition": {"duration": 1, "easing": "linear"}
+                        "transition": {"duration": 0, "easing": "linear"}
                     }]
                 },
                 {
