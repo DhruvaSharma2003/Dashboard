@@ -826,7 +826,7 @@ fig_district_trend.update_layout(
                 'label': 'Play',
                 'method': 'animate',
                 'args': [None, {
-                    'frame': {'duration': 5000, 'redraw': True},
+                    'frame': {'duration': 200, 'redraw': True},
                     'fromcurrent': True,
                     'transition': {'duration': 0}
                 }]
