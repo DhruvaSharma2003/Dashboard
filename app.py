@@ -657,7 +657,7 @@ if selected_state_map != "None":
                                 'label': 'Play',
                                 'method': 'animate',
                                 'args': [None, {
-                                    'frame': {'duration': 50, 'redraw': True},  # << faster animation (300 ms per frame)
+                                    'frame': {'duration': 200, 'redraw': True},  # << faster animation (300 ms per frame)
                                     'fromcurrent': True,
                                     'transition': {'duration': 0}
                                 }]
