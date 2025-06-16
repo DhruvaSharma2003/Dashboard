@@ -334,7 +334,7 @@ if historical_df is not None and forecast_df is not None:
                 "method": "animate",
                 "args": [[None], {
                     "mode": "immediate",
-                    "frame": {"duration": 50},
+                    "frame": {"duration": 0},
                     "transition": {"duration": 0}
                 }]
             }]
