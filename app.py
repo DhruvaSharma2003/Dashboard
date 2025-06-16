@@ -334,7 +334,7 @@ if historical_df is not None and forecast_df is not None:
                 "method": "animate",
                 "args": [[None], {
                     "mode": "immediate",
-                    "frame": {"duration": 0},
+                    "frame": {"duration": 50},
                     "transition": {"duration": 0}
                 }]
             }]
@@ -665,7 +665,7 @@ if selected_state_map != "None":
                             'label': 'Pause',
                             'method': 'animate',
                             'args': [[None], {
-                                'frame': {'duration': 0, 'redraw': False},
+                                'frame': {'duration': 50, 'redraw': False},
                                 'mode': 'immediate',
                                 'transition': {'duration': 0}
                             }]
@@ -835,7 +835,7 @@ fig_district_trend.update_layout(
                 'label': 'Pause',
                 'method': 'animate',
                 'args': [[None], {
-                    'frame': {'duration': 0, 'redraw': False},
+                    'frame': {'duration': 50, 'redraw': False},
                     'mode': 'immediate',
                     'transition': {'duration': 0}
                 }]
