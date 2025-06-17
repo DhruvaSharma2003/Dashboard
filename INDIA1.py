@@ -652,4 +652,3 @@ if selected_district_for_line_plot:
     st.plotly_chart(fig_district_trend_simulated, use_container_width=True)
 else:
     st.info("Please select a state to view district-wise trend simulation.")
-�
