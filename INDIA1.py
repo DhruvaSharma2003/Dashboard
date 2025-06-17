@@ -114,7 +114,7 @@ gdf_districts = load_india_districts_shapefile()
 # Filter out "India" if it somehow made it into state names in district shapefile
 gdf_districts = gdf_districts[gdf_districts["ST_NM"] != "INDIA"]
 
-# Initialize df_pulses outside the try block
+# Initialize df_pulses outside the try block to ensure it's always defined
 df_pulses = pd.DataFrame()
 
 # ---------- INDIA PULSES CHOROPLETH MAP ----------
@@ -142,11 +142,19 @@ try:
     df_pulses_raw = df_pulses_raw.rename(columns={"States/UTs": "State"})
     df_pulses_raw = df_pulses_raw[df_pulses_raw["Season"].str.lower() == season.lower()].copy() # Filter by season and create a copy
 
-    # Drop rows where 'Year' is NaN before attempting to convert to int
-    df_pulses_raw = df_pulses_raw.dropna(subset=["Year"])
+    # Robust year parsing: Convert to string, split, then to numeric with error coercing
+    df_pulses_raw["Year_Processed"] = pd.to_numeric(
+        df_pulses_raw["Year"].astype(str).str.split('-').str[0],
+        errors='coerce'
+    )
+    # Drop rows where the processed year is NaN (conversion failed)
+    df_pulses_raw = df_pulses_raw.dropna(subset=["Year_Processed"])
+    # Convert processed year to integer and assign back to 'Year'
+    df_pulses_raw["Year"] = df_pulses_raw["Year_Processed"].astype(int)
+    # Drop the temporary column
+    df_pulses_raw = df_pulses_raw.drop(columns=["Year_Processed"])
 
-    # Parse 'Year' column: take the first part if it's a range (e.g., "2000-01" -> 2000)
-    df_pulses_raw["Year"] = df_pulses_raw["Year"].astype(str).str.split('-').str[0].astype(int)
+
     df_pulses_raw[metric] = pd.to_numeric(df_pulses_raw[metric], errors="coerce") # Coerce metric column to numeric
     df_pulses_raw = df_pulses_raw.dropna(subset=[metric]) # Drop rows where the metric is missing
 
@@ -154,7 +162,7 @@ try:
     df_pulses_raw["State"] = df_pulses_raw["State"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper() # Apply corrections and convert to uppercase
 
     # Determine available years and create decade ranges
-    if not df_pulses_raw.empty:
+    if not df_pulses_raw.empty and "Year" in df_pulses_raw.columns:
         min_year = int(df_pulses_raw["Year"].min())
         max_year = int(df_pulses_raw["Year"].max())
     else:
@@ -277,7 +285,7 @@ except Exception as e:
 # This DataFrame contains all states and years for the selected season/pulse type.
 # It's used to populate the state selection dropdown dynamically.
 # Ensure this is only run if df_pulses is not empty from the try-except block
-if 'df_pulses' in locals() and not df_pulses.empty:
+if 'df_pulses' in locals() and not df_pulses.empty and "State" in df_pulses.columns:
     available_states_for_dropdown = df_pulses["State"].unique().tolist()
 else:
     available_states_for_dropdown = []
@@ -320,9 +328,14 @@ if selected_state_map != "None":
             st.warning(f"No district data found for {selected_state_map}. Please check state name consistency.")
         else:
             # Get historical data for the selected state from the main df_pulses DataFrame
-            state_historical_df = df_pulses[ # Uses the already filtered df_pulses
-                df_pulses["State"].str.upper().str.replace(" ", "") == normalized_selected_state
-            ].copy()
+            # Ensure 'State' and 'Year' columns exist before filtering
+            if not df_pulses.empty and "State" in df_pulses.columns and "Year" in df_pulses.columns:
+                state_historical_df = df_pulses[ # Uses the already filtered df_pulses
+                    df_pulses["State"].str.upper().str.replace(" ", "") == normalized_selected_state
+                ].copy()
+            else:
+                state_historical_df = pd.DataFrame()
+
 
             if state_historical_df.empty:
                 st.warning(f"No pulse data available for {selected_state_map} for {season} - {pulse_type} - {metric} over time within the selected decade.")
@@ -453,7 +466,7 @@ if selected_state_map != "None":
             # ---------- STATE-WISE ANIMATED HISTORICAL PLOT (LINE CHART) ----------
             # This section generates a line chart showing historical trends for the selected state.
             # This part remains largely similar to the original code.
-            if not state_historical_df.empty:
+            if not state_historical_df.empty and "Year" in state_historical_df.columns and metric in state_historical_df.columns:
                 st.markdown(f"### Animated Historical Trend for {selected_state_map}")
 
                 state_historical_df = state_historical_df.sort_values("Year")
@@ -479,10 +492,10 @@ if selected_state_map != "None":
                     animated_state_line_df = pd.concat(animation_frames_line, ignore_index=True)
 
                     # Set fixed axis limits for stable animation view
-                    y_min_state = state_historical_df[metric].min() * 0.95
-                    y_max_state = state_historical_df[metric].max() * 1.05
-                    x_min_state = state_historical_df["Year"].min()
-                    x_max_state = state_historical_df["Year"].max()
+                    y_min_state = animated_state_line_df[metric].min() * 0.95
+                    y_max_state = animated_state_line_df[metric].max() * 1.05
+                    x_min_state = animated_state_line_df["Year"].min()
+                    x_max_state = animated_state_line_df["Year"].max()
 
                     # Create the animated line plot
                     fig_state_trend = px.line(
@@ -541,6 +554,8 @@ if selected_state_map != "None":
                     st.plotly_chart(fig_state_trend, use_container_width=True)
                 else:
                     st.warning(f"No historical data with values for '{metric}' is available to plot a trend for {selected_state_map}.")
+            else:
+                st.warning(f"Required columns ('Year' or '{metric}') are missing in historical data for {selected_state_map}.")
 
 
 # ---------- FULL INDIA DISTRICT MAP ----------
@@ -554,11 +569,11 @@ st.subheader("🇮🇳 Full India District Map View (Fabricated Values)")
 animated_full_india_district_data = []
 
 # Get all unique years from the main df_pulses dataframe
-# Ensure df_pulses is not empty before attempting to get unique years
-if not df_pulses.empty:
+# Ensure df_pulses is not empty and has 'Year' column before attempting to get unique years
+if not df_pulses.empty and "Year" in df_pulses.columns and metric in df_pulses.columns and "State" in df_pulses.columns:
     all_years_for_full_map = sorted(df_pulses["Year"].unique())
 else:
-    all_years_for_full_map = [] # Set to empty list if df_pulses is empty
+    all_years_for_full_map = [] # Set to empty list if df_pulses is empty or columns are missing
 
 for year in all_years_for_full_map:
     # Get state data for the current year
