@@ -82,6 +82,13 @@ STATE_NAME_CORRECTIONS = {
     "Ladakh": "Ladakh" # Add Ladakh if it appears (post 2019 UT)
 }
 
+# Define pulse units globally so they are always accessible
+pulse_units = {
+    "Area": "'000 Hectare",
+    "Production": "'000 Tonne",
+    "Yield": "Kg/Hectare"
+}
+
 # Global flags for data loading success
 data_loaded_successfully = True
 
@@ -341,7 +348,8 @@ if data_loaded_successfully:
                 st.plotly_chart(fig_india_pulses, use_container_width=True)
 
     except Exception as e:
-        st.exception(f"An error occurred during India Pulses Map processing: {e}. Please check your data and selections.")
+        st.exception(e) # This will print the full traceback
+        st.error(f"An error occurred during India Pulses Map processing: {e}. Please check your data and selections.")
         df_pulses = pd.DataFrame() # Ensure df_pulses is an empty DataFrame on error
         data_loaded_successfully = False # Mark data loading as unsuccessful
 else:
@@ -544,11 +552,6 @@ if data_loaded_successfully and selected_state_map != "None" and state_col and d
 
             state_historical_df = state_historical_df.sort_values("Year")
 
-            pulse_units = {
-                "Area": "'000 Hectare",
-                "Production": "'000 Tonne",
-                "Yield": "Kg/Hectare"
-            }
             y_axis_title = f"{metric} ({pulse_units.get(metric, '')})"
 
             if not state_historical_df.empty and state_historical_df[metric].notna().any():
@@ -778,8 +781,6 @@ else:
 
 
 # ---------- DISTRICT-WISE ANIMATED HISTORICAL PLOT (RANDOM VALUES) ----------
-# This section generates a line chart showing simulated historical trends for a selected district.
-# This part uses random data and is kept separate from the actual pulse data logic, as requested.
 st.markdown("---")
 st.subheader("📽️ Animated District-wise Trend (Simulated Data)")
 
