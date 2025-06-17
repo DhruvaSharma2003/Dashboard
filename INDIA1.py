@@ -95,23 +95,21 @@ data_loaded_successfully = True
 
 # --- Cached GeoJSON loading functions ---
 @st.cache_data
-def load_india_states_geojson(path="India_Shapefile/india_st.shp"):
+def load_india_states_gdf(path="India_Shapefile/india_st.shp"):
     """
-    Loads India states shapefile, normalizes state names, and converts it
-    to GeoJSON format suitable for Plotly.
+    Loads India states shapefile, normalizes state names, and returns a GeoDataFrame.
     """
     if not os.path.exists(path):
         st.error(f"Error: India states shapefile not found at '{path}'. Please ensure the file exists.")
         return None
     try:
         gdf = gpd.read_file(path)
-        # Ensure consistent state names for merging with data
-        gdf["State_Name"] = gdf["State_Name"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper() # Apply corrections and convert to uppercase
+        gdf["State_Name"] = gdf["State_Name"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper()
         st.info(f"Successfully loaded {len(gdf)} state geometries from '{path}'.")
-        st.info(f"Sample GeoJSON state names: {sorted(gdf['State_Name'].unique().tolist())[:5]}...") # Show sample
-        return json.loads(gdf.to_json())
+        st.info(f"Sample GeoDataFrame state names: {sorted(gdf['State_Name'].unique().tolist())[:5]}...")
+        return gdf
     except Exception as e:
-        st.exception(f"Error loading India states GeoJSON from '{path}': {e}")
+        st.exception(f"Error loading India states GeoDataFrame from '{path}': {e}")
         return None
 
 @st.cache_data
@@ -127,36 +125,31 @@ def load_india_districts_shapefile():
     try:
         gdf = gpd.read_file(path)
         gdf = gdf.set_crs(epsg=4326, inplace=False)
-        # Normalize state names in the district shapefile as well
-        gdf["ST_NM"] = gdf["ST_NM"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper() # Apply corrections and convert to uppercase
+        gdf["ST_NM"] = gdf["ST_NM"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper()
         st.info(f"Successfully loaded {len(gdf)} district geometries from '{path}'.")
-        st.info(f"Sample District shapefile state names: {sorted(gdf['ST_NM'].unique().tolist())[:5]}...") # Show sample
+        st.info(f"Sample District shapefile state names: {sorted(gdf['ST_NM'].unique().tolist())[:5]}...")
         return gdf
     except Exception as e:
         st.exception(f"Error loading India districts shapefile from '{path}': {e}")
         return None
 
-# Load GeoJSON data for states and districts once
-# These variables must be global or passed around
-india_states_geojson = load_india_states_geojson()
+# Load GeoDataFrame for states and districts once
+india_states_gdf = load_india_states_gdf() # Load as GeoDataFrame, not GeoJSON dict
 gdf_districts = load_india_districts_shapefile()
 
-# Check if GeoJSON data loaded successfully
-if india_states_geojson is None or gdf_districts is None:
+# Check if GeoDataFrame data loaded successfully
+if india_states_gdf is None or gdf_districts is None:
     data_loaded_successfully = False
-    st.error("Map data (GeoJSON/Shapefiles) could not be loaded. Please check file paths and permissions.")
+    st.error("Map data (GeoDataFrames/Shapefiles) could not be loaded. Please check file paths and permissions.")
 else:
-    # Filter out "India" if it somehow made it into state names in district shapefile
-    # Ensure 'ST_NM' column exists before filtering
     if 'ST_NM' in gdf_districts.columns:
-        gdf_districts = gdf_districts[gdf_districts["ST_NM"] != "INDIA"].copy() # Use .copy() to avoid SettingWithCopyWarning
+        gdf_districts = gdf_districts[gdf_districts["ST_NM"] != "INDIA"].copy()
     else:
         st.warning("'ST_NM' column not found in district shapefile. Cannot filter 'INDIA' state.")
 
-
-# Initialize df_pulses outside the try block to ensure it's always defined
+# Initialize df_pulses outside the try block
 df_pulses = pd.DataFrame()
-df_pulses_raw = pd.DataFrame() # Also initialize df_pulses_raw here
+df_pulses_raw = pd.DataFrame()
 
 # ---------- INDIA PULSES CHOROPLETH MAP ----------
 st.subheader("🇮🇳 India Pulses Choropleth Map Over Time")
@@ -164,201 +157,137 @@ st.subheader("🇮🇳 India Pulses Choropleth Map Over Time")
 with st.sidebar:
     st.markdown("### 🌱 Pulses Map Settings")
     season = st.selectbox("Select Season", ["Kharif", "Rabi", "Total"])
-
     pulse_sheets = ["Gram", "Urad", "Moong", "Masoor", "Moth", "Kulthi", "Khesari", "Peas", "Arhar"]
     pulse_type = st.selectbox("Select Pulse Type", pulse_sheets)
-
     metric = st.selectbox("Select Metric", ["Area", "Production", "Yield"])
 
-# Only attempt to load and process pulse data if GeoJSONs are loaded
 if data_loaded_successfully:
     try:
         excel_path = "Data/Pulses_Data.xlsx"
         if not os.path.exists(excel_path):
             st.error(f"Error: Pulses data Excel file not found at '{excel_path}'. Please ensure the file exists.")
             data_loaded_successfully = False
-            # The function will re-run, so a direct return is not needed, but setting flag is key.
         else:
-            # Read the data from Excel
-            df_pulses_raw = pd.read_excel(
-                excel_path,
-                sheet_name=pulse_type,
-                header=1 # Header is in the second row (row 2 in Excel)
-            )
-            st.info(f"Successfully loaded raw data for '{pulse_type}' from '{excel_path}'. Original rows: {len(df_pulses_raw)}.")
+            df_pulses_raw = pd.read_excel(excel_path, sheet_name=pulse_type, header=1)
+            st.info(f"Successfully loaded raw data for '{pulse_type}'. Original rows: {len(df_pulses_raw)}.")
             st.info(f"Raw df_pulses_raw columns: {df_pulses_raw.columns.tolist()}")
             st.info(f"Raw df_pulses_raw head:\n{df_pulses_raw.head().to_string()}")
 
-            # Clean and preprocess data
             df_pulses_raw.columns = df_pulses_raw.columns.str.strip()
             df_pulses_raw = df_pulses_raw.rename(columns={"States/UTs": "State"})
 
-            # Ensure 'Season' column exists and filter
             if "Season" in df_pulses_raw.columns:
-                df_pulses_raw = df_pulses_raw[df_pulses_raw["Season"].str.lower() == season.lower()].copy() # Filter by season and create a copy
+                df_pulses_raw = df_pulses_raw[df_pulses_raw["Season"].str.lower() == season.lower()].copy()
                 st.info(f"After Season filter, df_pulses_raw rows: {len(df_pulses_raw)}.")
             else:
-                st.warning("Season column not found in pulses data. Please check your Excel file structure.")
-                df_pulses_raw = pd.DataFrame() # Empty DataFrame if column is missing
+                st.warning("Season column not found in pulses data. Check Excel structure.")
+                df_pulses_raw = pd.DataFrame()
 
             if not df_pulses_raw.empty and "Year" in df_pulses_raw.columns:
-                # Robust year parsing: Convert to string, split, then to numeric with error coercing
-                df_pulses_raw["Year_Processed"] = pd.to_numeric(
-                    df_pulses_raw["Year"].astype(str).str.split('-').str[0],
-                    errors='coerce'
-                )
-                # Drop rows where the processed year is NaN (conversion failed)
-                df_pulses_raw = df_pulses_raw.dropna(subset=["Year_Processed"]).copy() # Use .copy()
-                st.info(f"After Year processing & NaN drop, df_pulses_raw rows: {len(df_pulses_raw)}.")
-
-                # Check if 'Year_Processed' is still empty after dropping NaNs
+                df_pulses_raw["Year_Processed"] = pd.to_numeric(df_pulses_raw["Year"].astype(str).str.split('-').str[0], errors='coerce')
+                df_pulses_raw = df_pulses_raw.dropna(subset=["Year_Processed"]).copy()
                 if not df_pulses_raw.empty:
-                    # Convert processed year to integer and assign back to 'Year'
                     df_pulses_raw["Year"] = df_pulses_raw["Year_Processed"].astype(int)
-                    # Drop the temporary column
                     df_pulses_raw = df_pulses_raw.drop(columns=["Year_Processed"])
                 else:
-                    st.warning("No valid 'Year' data after processing. Check 'Year' column in Excel for non-numeric values.")
-                    df_pulses_raw = pd.DataFrame() # Empty if no valid years
-            elif not df_pulses_raw.empty: # if df_pulses_raw has data but Year column is missing
-                st.warning("Year column not found in pulses data. Please check your Excel file structure.")
-                df_pulses_raw = pd.DataFrame() # Empty if Year column is missing
+                    st.warning("No valid 'Year' data after processing. Check 'Year' column in Excel.")
+                    df_pulses_raw = pd.DataFrame()
+            elif not df_pulses_raw.empty:
+                st.warning("Year column not found in pulses data. Check Excel structure.")
+                df_pulses_raw = pd.DataFrame()
 
-
-            # Ensure metric column exists and is numeric
             if not df_pulses_raw.empty and metric in df_pulses_raw.columns:
-                df_pulses_raw[metric] = pd.to_numeric(df_pulses_raw[metric], errors="coerce") # Coerce metric column to numeric
-                df_pulses_raw = df_pulses_raw.dropna(subset=[metric]).copy() # Use .copy()
+                df_pulses_raw[metric] = pd.to_numeric(df_pulses_raw[metric], errors="coerce")
+                df_pulses_raw = df_pulses_raw.dropna(subset=[metric]).copy()
                 st.info(f"After Metric processing & NaN drop, df_pulses_raw rows: {len(df_pulses_raw)}.")
-            elif not df_pulses_raw.empty: # if df_pulses_raw has data but metric column is missing
-                st.warning(f"Metric column '{metric}' not found in pulses data. Please check your Excel file structure.")
-                df_pulses_raw = pd.DataFrame() # Empty if metric column is missing
+            elif not df_pulses_raw.empty:
+                st.warning(f"Metric column '{metric}' not found in pulses data. Check Excel structure.")
+                df_pulses_raw = pd.DataFrame()
 
-
-            # Normalize state names in the DataFrame for consistent merging with GeoJSON
             if not df_pulses_raw.empty and "State" in df_pulses_raw.columns:
-                df_pulses_raw["State"] = df_pulses_raw["State"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper() # Apply corrections and convert to uppercase
+                df_pulses_raw["State"] = df_pulses_raw["State"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper()
                 st.info(f"Unique state names from Pulses Data (after normalization): {sorted(df_pulses_raw['State'].unique().tolist())}")
-            elif not df_pulses_raw.empty: # if df_pulses_raw has data but State column is missing
-                st.warning("State column not found in pulses data. Please check your Excel file structure.")
-                df_pulses_raw = pd.DataFrame() # Empty if state column is missing
+            elif not df_pulses_raw.empty:
+                st.warning("State column not found in pulses data. Check Excel structure.")
+                df_pulses_raw = pd.DataFrame()
 
-
-            # Determine available years and create decade ranges
+            min_year = 0
+            max_year = 0
             if not df_pulses_raw.empty and "Year" in df_pulses_raw.columns:
                 min_year = int(df_pulses_raw["Year"].min())
                 max_year = int(df_pulses_raw["Year"].max())
                 st.info(f"Calculated year range from raw data: {min_year}-{max_year}")
             else:
-                min_year = 0
-                max_year = 0
-                st.warning("Cannot determine year range as pulses data is empty or 'Year' column is missing after processing. Decade selection will be unavailable.")
-                data_loaded_successfully = False # Mark data loading as unsuccessful if no years for decades
+                st.warning("Cannot determine year range. Decade selection will be unavailable.")
+                data_loaded_successfully = False
 
-            # Generate decade options
             decade_options = []
-            if min_year != 0 or max_year != 0: # Only generate decades if there's actual data
+            if min_year != 0 or max_year != 0:
                 current_decade_start = (min_year // 10) * 10
                 while current_decade_start <= max_year:
                     decade_end = current_decade_start + 9
-                    if decade_end > max_year: # If the decade extends beyond max_year, clip it
+                    if decade_end > max_year:
                         decade_end = max_year
                     decade_string = f"{current_decade_start}-{decade_end}"
                     decade_options.append(decade_string)
-                    current_decade_start += 10 # Move to the next decade
+                    current_decade_start += 10
 
-            # Add a dropdown for decade selection
-            selected_decade_range = None # Initialize to None
+            selected_decade_range = None
             if decade_options:
                 selected_decade_range = st.selectbox("Select Decade Range", decade_options)
-                # Filter df_pulses based on the selected decade range
                 start_year_decade, end_year_decade = map(int, selected_decade_range.split('-'))
                 df_pulses = df_pulses_raw[
                     (df_pulses_raw["Year"] >= start_year_decade) &
                     (df_pulses_raw["Year"] <= end_year_decade)
-                ].copy() # Use a copy to avoid modifying the raw DataFrame for other uses
+                ].copy()
                 st.info(f"Data filtered for decade: {selected_decade_range}. Rows: {len(df_pulses)}. Years: {sorted(df_pulses['Year'].unique().tolist()) if not df_pulses.empty else 'None'}")
             else:
-                st.warning("No complete decade ranges found for the selected filters. Please check data or selections.")
-                df_pulses = pd.DataFrame() # Ensure df_pulses is empty if no decades are generated
-                data_loaded_successfully = False # Mark data loading as unsuccessful
+                st.warning("No complete decade ranges found. Check data or selections.")
+                df_pulses = pd.DataFrame()
+                data_loaded_successfully = False
 
-            # Determine unit for the map title and colorbar
-            unit = pulse_units.get(metric, "Unit") # Default to "Unit" if not found
+            unit = pulse_units.get(metric, "Unit")
             title_suffix = f" in {selected_decade_range}" if selected_decade_range else "(No Decade Selected)"
             title = f"{pulse_type} - {season} - {metric} Over Time ({unit}){title_suffix}"
 
-            # Check if df_pulses is empty after filtering
             if df_pulses.empty:
                 st.warning("No data found for the selected Season, Pulse Type, Metric, and Decade. Please adjust your selections.")
-            elif india_states_geojson is None: # Check if GeoJSON is loaded
-                 st.warning("India states GeoJSON is not loaded. Cannot display map.")
+            elif india_states_gdf is None:
+                 st.warning("India states GeoDataFrame is not loaded. Cannot display map.")
             elif "State" not in df_pulses.columns or metric not in df_pulses.columns or "Year" not in df_pulses.columns:
                  st.warning("Required columns (State, Metric, Year) missing in filtered pulses data. Cannot display map.")
             else:
-                # Create choropleth map with animation using Plotly Express
                 fig_india_pulses = px.choropleth(
                     df_pulses,
-                    geojson=india_states_geojson,
-                    locations="State", # Column in df_pulses with state names
-                    featureidkey="properties.State_Name", # Property in GeoJSON for matching state names
-                    color=metric, # Column to determine color
-                    hover_name="State", # Column for hover information
-                    animation_frame="Year", # Column to animate over
-                    color_continuous_scale="YlGnBu", # Color scale
-                    title=title, # Map title
-                    labels={metric: unit} # Set colorbar label
+                    geojson=india_states_gdf.geometry.__geo_interface__, # Use geometry interface
+                    locations="State",
+                    featureidkey="properties.State_Name", # Match against properties in the GeoDataFrame
+                    color=metric,
+                    hover_name="State",
+                    animation_frame="Year",
+                    color_continuous_scale="YlGnBu",
+                    title=title,
+                    labels={metric: unit}
                 )
 
-                # Layout adjustments for the map
-                fig_india_pulses.update_geos(fitbounds="locations", visible=False) # Fit map to India bounds
+                fig_india_pulses.update_geos(fitbounds="locations", visible=False)
                 fig_india_pulses.update_layout(
-                    coloraxis_colorbar=dict(title=unit), # Colorbar title
-                    margin={"r": 0, "t": 40, "l": 0, "b": 0}, # Margins
-                    updatemenus=[{ # Play/Pause buttons
+                    coloraxis_colorbar=dict(title=unit),
+                    margin={"r": 0, "t": 40, "l": 0, "b": 0},
+                    updatemenus=[{
                         "type": "buttons",
                         "buttons": [
-                            {
-                                "label": "Play",
-                                "method": "animate",
-                                "args": [None, {
-                                    "frame": {"duration": 200, "redraw": True}, # Animation speed
-                                    "fromcurrent": True,
-                                    "transition": {"duration": 0, "easing": "linear"}
-                                }]
-                            },
-                            {
-                                "label": "Pause",
-                                "method": "animate",
-                                "args": [[None], {
-                                    "mode": "immediate", # Immediate stop on pause
-                                    "frame": {"duration": 0},
-                                    "transition": {"duration": 0}
-                                }]
-                            }
+                            {"label": "Play", "method": "animate", "args": [None, {"frame": {"duration": 200, "redraw": True}, "fromcurrent": True, "transition": {"duration": 0, "easing": "linear"}}]},
+                            {"label": "Pause", "method": "animate", "args": [[None], {"mode": "immediate", "frame": {"duration": 0}, "transition": {"duration": 0}}]}
                         ],
-                        "direction": "left",
-                        "pad": {"r": 10, "t": 87},
-                        "showactive": False,
-                        "x": 0.1,
-                        "xanchor": "right",
-                        "y": 0,
-                        "yanchor": "top"
+                        "direction": "left", "pad": {"r": 10, "t": 87}, "showactive": False, "x": 0.1, "xanchor": "right", "y": 0, "yanchor": "top"
                     }],
-                    sliders=[{ # Year slider
-                        "steps": [
-                            {"args": [[year], {"frame": {"duration": 200, "redraw": True}, "mode": "immediate", "transition": {"duration": 0}}],
-                             "label": str(year), "method": "animate"}
-                            for year in sorted(df_pulses["Year"].unique()) # Steps for each unique year within the selected decade
-                        ],
-                        "active": 0, # Start at the first year
-                        "transition": {"duration": 0},
-                        "x": 0.1,
-                        "pad": {"b": 10, "t": 50},
-                        "len": 0.9 # Length of the slider
+                    sliders=[{
+                        "steps": [{"args": [[year], {"frame": {"duration": 200, "redraw": True}, "mode": "immediate", "transition": {"duration": 0}}],
+                                   "label": str(year), "method": "animate"} for year in sorted(df_pulses["Year"].unique())],
+                        "active": 0, "transition": {"duration": 0}, "x": 0.1, "pad": {"b": 10, "t": 50}, "len": 0.9
                     }]
                 )
-                # Ensure a consistent range for the color axis across all frames
                 color_min = df_pulses[metric].min()
                 color_max = df_pulses[metric].max()
                 fig_india_pulses.update_coloraxes(cmin=color_min, cmax=color_max)
@@ -366,32 +295,25 @@ if data_loaded_successfully:
                 st.plotly_chart(fig_india_pulses, use_container_width=True)
 
     except Exception as e:
-        st.exception(e) # This will print the full traceback
-        st.error(f"An error occurred during India Pulses Map processing: {e}. Please check your data and selections.")
-        df_pulses = pd.DataFrame() # Ensure df_pulses is an empty DataFrame on error
-        data_loaded_successfully = False # Mark data loading as unsuccessful
+        st.exception(e)
+        st.error(f"An error occurred during India Pulses Map processing: {e}. Check data and selections.")
+        df_pulses = pd.DataFrame()
+        data_loaded_successfully = False
 else:
     st.warning("Skipping India Pulses Map rendering due to previous data loading errors.")
 
-
-# This DataFrame contains all states and years for the selected season/pulse type.
-# It's used to populate the state selection dropdown dynamically.
-# Ensure this is only run if df_pulses is not empty from the try-except block
 if data_loaded_successfully and not df_pulses.empty and "State" in df_pulses.columns:
     available_states_for_dropdown = df_pulses["State"].unique().tolist()
 else:
     available_states_for_dropdown = []
 
-
 # ---------- STATE MAP VIEW ----------
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🗺️ State Map View")
 
-# Dropdown to select a state for detailed district map view
 state_options = ["None"] + sorted(available_states_for_dropdown)
 selected_state_map = st.sidebar.selectbox("Select State for State Map", state_options)
 
-# Auto detect STATE and DISTRICT columns in the district shapefile
 state_col = None
 district_col = None
 if gdf_districts is not None and not gdf_districts.empty:
@@ -404,53 +326,39 @@ if gdf_districts is not None and not gdf_districts.empty:
             district_col = col
             break
 
-# Only proceed with state map if all necessary data and columns are available
 if data_loaded_successfully and selected_state_map != "None" and state_col and district_col:
-    # Filter the district GeoDataFrame for the selected state
-    # Normalize selected state name and GeoDataFrame state names for matching
     normalized_selected_state = selected_state_map.upper().replace(" ", "")
     if state_col in gdf_districts.columns:
         state_gdf_filtered = gdf_districts[
             gdf_districts[state_col].str.upper().str.replace(" ", "") == normalized_selected_state
-        ].copy() # Create a copy to avoid SettingWithCopyWarning
+        ].copy()
         st.info(f"State GeoDataFrame filtered for '{selected_state_map}'. Rows: {len(state_gdf_filtered)}")
     else:
         st.error(f"Missing expected column '{state_col}' in district shapefile for state filtering.")
-        state_gdf_filtered = gpd.GeoDataFrame() # Empty GeoDataFrame to prevent further errors
+        state_gdf_filtered = gpd.GeoDataFrame()
 
     if state_gdf_filtered.empty:
-        st.warning(f"No district data found for {selected_state_map} in the district shapefile. Please check state name consistency.")
+        st.warning(f"No district data found for {selected_state_map} in the district shapefile. Check state name consistency.")
     else:
-        # Get historical data for the selected state from the main df_pulses DataFrame
-        # Ensure 'State', 'Year', and metric columns exist before filtering
         if not df_pulses.empty and "State" in df_pulses.columns and "Year" in df_pulses.columns and metric in df_pulses.columns:
-            state_historical_df = df_pulses[ # Uses the already filtered df_pulses
+            state_historical_df = df_pulses[
                 df_pulses["State"].str.upper().str.replace(" ", "") == normalized_selected_state
             ].copy()
             st.info(f"State historical data (from df_pulses) for '{selected_state_map}'. Rows: {len(state_historical_df)}")
         else:
-            st.warning("Pulses data (df_pulses) is empty or missing required columns for state historical data.")
+            st.warning("Pulses data (df_pulses) is empty or missing required columns for state historical data. Skipping state map plot.")
             state_historical_df = pd.DataFrame()
-
 
         if state_historical_df.empty:
             st.warning(f"No pulse data available for {selected_state_map} for {season} - {pulse_type} - {metric} over time within the selected decade. Skipping state map plot.")
         else:
-            # Prepare a list to store data for animated district map (for all years)
             animated_state_district_data = []
-
-            # Get all unique years present in the selected state's data
             all_years_in_state_data = sorted(state_historical_df["Year"].unique())
 
             for year in all_years_in_state_data:
-                # Get the state's total value for the current year
                 current_year_state_data = state_historical_df[state_historical_df["Year"] == year]
-                if not current_year_state_data.empty:
-                    state_total_value = current_year_state_data[metric].values[0]
-                else:
-                    state_total_value = 0 # Default to 0 if no data for a specific year
+                state_total_value = current_year_state_data[metric].values[0] if not current_year_state_data.empty else 0
 
-                # Fabricate values for districts within the selected state for the current year
                 if district_col in state_gdf_filtered.columns:
                     districts_in_state = state_gdf_filtered[district_col].dropna().unique().tolist()
                 else:
@@ -458,205 +366,102 @@ if data_loaded_successfully and selected_state_map != "None" and state_col and d
                     st.warning(f"District column '{district_col}' not found in filtered state GeoDataFrame for data fabrication.")
 
                 n_districts = len(districts_in_state)
+                dummy_values_for_year = np.random.dirichlet(np.ones(n_districts)) * state_total_value if n_districts > 0 and pd.notna(state_total_value) else []
 
-                if n_districts > 0 and pd.notna(state_total_value):
-                    # Use Dirichlet distribution to create random proportions that sum to 1
-                    proportions = np.random.dirichlet(np.ones(n_districts))
-                    dummy_values_for_year = proportions * state_total_value
-                else:
-                    dummy_values_for_year = [] # No districts, no dummy values
-
-                # Create a temporary DataFrame for this year's districts and values
                 temp_df = pd.DataFrame({
                     district_col: districts_in_state,
                     "Dummy_Value": dummy_values_for_year,
-                    "Year": year # Add the year column for animation
+                    "Year": year
                 })
                 animated_state_district_data.append(temp_df)
 
             if animated_state_district_data:
-                # Concatenate all annual dataframes to create the full animated dataset
                 animated_state_district_df = pd.concat(animated_state_district_data, ignore_index=True)
-
-                # Merge district geometries with the animated data (left merge to keep all geometries)
-                merged_district_gdf = state_gdf_filtered.merge(
-                    animated_state_district_df,
-                    left_on=district_col,
-                    right_on=district_col,
-                    how="left"
-                )
-                st.info(f"Merged district GeoDataFrame rows: {len(merged_district_gdf)}")
-                st.info(f"Sample merged_district_gdf head:\n{merged_district_gdf.head().to_string()}")
-
-
-                # Convert the merged GeoDataFrame to GeoJSON dictionary for Plotly Express
-                state_districts_geojson = json.loads(merged_district_gdf.to_json())
+                merged_district_gdf = state_gdf_filtered.merge(animated_state_district_df, left_on=district_col, right_on=district_col, how="left")
+                st.info(f"Merged district GeoDataFrame rows for state map: {len(merged_district_gdf)}")
+                st.info(f"Sample merged_district_gdf head for state map:\n{merged_district_gdf.head().to_string()}")
 
                 st.markdown(f"### 📍 {selected_state_map} District Map - {metric} ({season}, {pulse_type})")
 
-                # Create animated choropleth map for the selected state's districts
                 fig_state_districts = px.choropleth(
                     merged_district_gdf,
-                    geojson=state_districts_geojson,
+                    geojson=merged_district_gdf.geometry.__geo_interface__, # Use geometry interface
                     locations=district_col,
-                    featureidkey=f"properties.{district_col}", # Match district name in GeoJSON properties
-                    color="Dummy_Value", # Fabricated value for color
+                    featureidkey=f"properties.{district_col}", # Match against properties in the GeoDataFrame
+                    color="Dummy_Value",
                     hover_name=district_col,
                     animation_frame="Year",
                     color_continuous_scale="YlOrRd",
                     title=f"{selected_state_map} District Map - {metric} ({season}, {pulse_type}) Over Time",
-                    labels={"Dummy_Value": unit} # Colorbar label
+                    labels={"Dummy_Value": unit}
                 )
 
-                # Layout adjustments for the state district map
                 fig_state_districts.update_geos(fitbounds="locations", visible=False)
                 fig_state_districts.update_layout(
                     coloraxis_colorbar=dict(title=unit),
                     margin={"r": 0, "t": 40, "l": 0, "b": 0},
-                    updatemenus=[{ # Play/Pause buttons
+                    updatemenus=[{
                         "type": "buttons",
                         "buttons": [
-                            {
-                                "label": "Play",
-                                "method": "animate",
-                                "args": [None, {
-                                    "frame": {"duration": 200, "redraw": True},
-                                    "fromcurrent": True,
-                                    "transition": {"duration": 0, "easing": "linear"}
-                                }]
-                            },
-                            {
-                                "label": "Pause",
-                                "method": "animate",
-                                "args": [[None], {
-                                    "mode": "immediate",
-                                    "frame": {"duration": 0},
-                                    "transition": {"duration": 0}
-                                }]
-                            }
+                            {"label": "Play", "method": "animate", "args": [None, {"frame": {"duration": 200, "redraw": True}, "fromcurrent": True, "transition": {"duration": 0, "easing": "linear"}}]},
+                            {"label": "Pause", "method": "animate", "args": [[None], {"mode": "immediate", "frame": {"duration": 0}, "transition": {"duration": 0}}]}
                         ],
-                        "direction": "left",
-                        "pad": {"r": 10, "t": 87},
-                        "showactive": False,
-                        "x": 0.1,
-                        "xanchor": "right",
-                        "y": 0,
-                        "yanchor": "top"
+                        "direction": "left", "pad": {"r": 10, "t": 87}, "showactive": False, "x": 0.1, "xanchor": "right", "y": 0, "yanchor": "top"
                     }],
-                    sliders=[{ # Year slider for state districts
-                        "steps": [
-                            {"args": [[year], {"frame": {"duration": 200, "redraw": True}, "mode": "immediate", "transition": {"duration": 0}}],
-                             "label": str(year), "method": "animate"}
-                            for year in all_years_in_state_data
-                        ],
-                        "active": 0,
-                        "transition": {"duration": 0},
-                        "x": 0.1,
-                        "pad": {"b": 10, "t": 50},
-                        "len": 0.9
+                    sliders=[{
+                        "steps": [{"args": [[year], {"frame": {"duration": 200, "redraw": True}, "mode": "immediate", "transition": {"duration": 0}}],
+                                   "label": str(year), "method": "animate"} for year in all_years_in_state_data],
+                        "active": 0, "transition": {"duration": 0}, "x": 0.1, "pad": {"b": 10, "t": 50}, "len": 0.9
                     }]
                 )
-                # Ensure a consistent range for the color axis across all frames
                 color_min_dist = merged_district_gdf["Dummy_Value"].min()
                 color_max_dist = merged_district_gdf["Dummy_Value"].max()
                 fig_state_districts.update_coloraxes(cmin=color_min_dist, cmax=color_max_dist)
-
-
                 st.plotly_chart(fig_state_districts, use_container_width=True)
             else:
                 st.warning(f"Could not generate animated district map for {selected_state_map}. Animated data list was empty.")
 
-
-        # ---------- STATE-WISE ANIMATED HISTORICAL PLOT (LINE CHART) ----------
-        # This section generates a line chart showing historical trends for the selected state.
-        # This part remains largely similar to the original code.
         if not state_historical_df.empty and "Year" in state_historical_df.columns and metric in state_historical_df.columns:
             st.markdown(f"### Animated Historical Trend for {selected_state_map}")
-
             state_historical_df = state_historical_df.sort_values("Year")
-
             y_axis_title = f"{metric} ({pulse_units.get(metric, '')})"
 
             if not state_historical_df.empty and state_historical_df[metric].notna().any():
-
                 all_years_for_line_plot = sorted(state_historical_df["Year"].unique())
                 animation_frames_line = []
-
-                # Prepare cumulative data for line chart animation
                 for year in all_years_for_line_plot:
                     frame_data = state_historical_df[state_historical_df["Year"] <= year].copy()
-                    frame_data["FrameYear"] = year # This column drives the animation
+                    frame_data["FrameYear"] = year
                     animation_frames_line.append(frame_data)
-
                 animated_state_line_df = pd.concat(animation_frames_line, ignore_index=True)
                 st.info(f"Animated state line data rows: {len(animated_state_line_df)}")
 
-
-                # Set fixed axis limits for stable animation view
                 if not animated_state_line_df.empty and metric in animated_state_line_df.columns:
                     y_min_state = animated_state_line_df[metric].min() * 0.95
                     y_max_state = animated_state_line_df[metric].max() * 1.05
                     x_min_state = animated_state_line_df["Year"].min()
                     x_max_state = animated_state_line_df["Year"].max()
                 else:
-                    y_min_state, y_max_state, x_min_state, x_max_state = 0, 1, 0, 1 # Default values
+                    y_min_state, y_max_state, x_min_state, x_max_state = 0, 1, 0, 1
                     st.warning("Could not determine axis limits for state historical plot. Data might be empty or missing metric column.")
 
-
-                # Create the animated line plot
                 fig_state_trend = px.line(
                     animated_state_line_df,
-                    x="Year",
-                    y=metric,
-                    animation_frame="FrameYear",   # Use the frame column to animate
-                    animation_group="State",       # Ensures the line is continuous
+                    x="Year", y=metric, animation_frame="FrameYear", animation_group="State",
                     title=f"Animated Trend of {metric} for {pulse_type} ({season}) in {selected_state_map}",
-                    markers=True,
-                    labels={"Year": "Year", metric: y_axis_title, "FrameYear": "Year"},
-                    range_y=[y_min_state, y_max_state],
-                    range_x=[x_min_state, x_max_state]
+                    markers=True, labels={"Year": "Year", metric: y_axis_title, "FrameYear": "Year"},
+                    range_y=[y_min_state, y_max_state], range_x=[x_min_state, x_max_state]
                 )
 
-                # Customize Layout and Animation Controls for the line chart
                 fig_state_trend.update_layout(
-                    yaxis_title=y_axis_title,
-                    xaxis_title="Year",
-                    font=dict(family="Poppins", size=12),
-                    title_font_size=18,
-                    legend_title="Metric",
-                    sliders=[{ # Year slider for line chart
-                        'currentvalue': {'prefix': 'Year: '},
-                        'pad': {'t': 20}
-                    }],
-                    updatemenus=[{ # Play/Pause buttons for line chart
-                        'type': 'buttons',
-                        'showactive': False,
-                        'x': 0.05,
-                        'y': -0.15,
-                        'buttons': [{
-                            'label': 'Play',
-                            'method': 'animate',
-                            'args': [None, {
-                                'frame': {'duration': 100, 'redraw': True},
-                                'fromcurrent': True,
-                                'transition': {'duration': 0}
-                            }]
-                        }, {
-                        'label': 'Pause',
-                        'method': 'animate',
-                        'args': [[None], {
-                            'frame': {'duration': 50, 'redraw': False},
-                            'mode': 'immediate',
-                            'transition': {'duration': 0}
-                        }]
-                        }]
-                    }]
+                    yaxis_title=y_axis_title, xaxis_title="Year",
+                    font=dict(family="Poppins", size=12), title_font_size=18, legend_title="Metric",
+                    sliders=[{'currentvalue': {'prefix': 'Year: '}, 'pad': {'t': 20}}],
+                    updatemenus=[{'type': 'buttons', 'showactive': False, 'x': 0.05, 'y': -0.15,
+                                  'buttons': [{'label': 'Play', 'method': 'animate', 'args': [None, {'frame': {'duration': 100, 'redraw': True}, 'fromcurrent': True, 'transition': {'duration': 0}}]},
+                                              {'label': 'Pause', 'method': 'animate', 'args': [[None], {'frame': {'duration': 50, 'redraw': False}, 'mode': 'immediate', 'transition': {'duration': 0}}]}]}]
                 )
-
-                fig_state_trend.update_layout({
-                    'sliders': [{'currentvalue': {'prefix': 'Year: '}, 'pad': {'t': 20}}]
-                })
-
+                fig_state_trend.update_layout({'sliders': [{'currentvalue': {'prefix': 'Year: '}, 'pad': {'t': 20}}]})
                 st.plotly_chart(fig_state_trend, use_container_width=True)
             else:
                 st.warning(f"No historical data with values for '{metric}' is available to plot a trend for {selected_state_map}. Animated data list was empty or missing metric.")
@@ -665,148 +470,124 @@ if data_loaded_successfully and selected_state_map != "None" and state_col and d
 else:
     st.warning("Skipping State Map rendering due to previous data loading errors.")
 
-
 # ---------- FULL INDIA DISTRICT MAP ----------
 st.markdown("---")
 st.subheader("🇮🇳 Full India District Map View (Fabricated Values)")
 
-# This map will also be animated over years, showing fabricated district data.
-# It uses the df_pulses (which contains data for all years) to get state totals for each year.
-
-# Prepare a comprehensive DataFrame that holds all districts, for all years, with their fabricated values.
 animated_full_india_district_data = []
 
-# Get all unique years from the main df_pulses dataframe
-# Ensure df_pulses is not empty and has 'Year' column before attempting to get unique years
-if data_loaded_successfully and not df_pulses.empty and "Year" in df_pulses.columns and metric in df_pulses.columns and "State" in df_pulses.columns:
+if data_loaded_successfully and not df_pulses.empty and "Year" in df_pulses.columns and metric in df_pulses.columns and "State" in df_pulses.columns and gdf_districts is not None and not gdf_districts.empty:
     all_years_for_full_map = sorted(df_pulses["Year"].unique())
     st.info(f"Years for Full India District Map: {all_years_for_full_map}")
-else:
-    all_years_for_full_map = [] # Set to empty list if df_pulses is empty or columns are missing
-    st.warning("Skipping Full India District Map data processing due to previous data loading errors or empty data.")
 
+    # Create a base DataFrame to hold all fabricated district data for all years in the decade
+    # This will be merged with gdf_districts later
+    all_fabricated_district_data = []
 
-for year in all_years_for_full_map:
-    # Get state data for the current year
-    df_current_year_states = df_pulses[df_pulses["Year"] == year].copy()
-    st.info(f"Processing Year: {year} for Full India District Map. States with data: {len(df_current_year_states)}")
+    for year in all_years_for_full_map:
+        df_current_year_states = df_pulses[df_pulses["Year"] == year].copy()
+        st.info(f"Processing Year: {year} for Full India District Map. States with data: {len(df_current_year_states)}")
 
-    # Create a temporary GeoDataFrame for this year's district data
-    temp_gdf_districts_year = gdf_districts.copy() # gdf_districts is initialized globally
-    temp_gdf_districts_year["Dummy_Value"] = np.nan # Initialize with NaN for districts without data
-    temp_gdf_districts_year["Year"] = year # Add the year column for animation
-
-    # Process each state that has data for the current year
-    for index, row in df_current_year_states.iterrows():
-        state_name_from_data = row["State"]
-        state_total_value = row[metric]
-
-        # Normalize state name for matching with district shapefile
-        normalized_state_name_data = state_name_from_data.upper().replace(" ", "")
-
-        # Select districts belonging to the current state
-        if state_col in temp_gdf_districts_year.columns:
-            state_districts_mask = temp_gdf_districts_year[state_col].str.upper().str.replace(" ", "") == normalized_state_name_data
+        # Get all unique districts from the master gdf_districts
+        if district_col in gdf_districts.columns:
+            all_districts = gdf_districts[district_col].dropna().unique().tolist()
         else:
-            st.error(f"Missing expected column '{state_col}' in temp_gdf_districts_year for full map state filtering.")
-            continue # Skip to next state if column is missing
+            st.error(f"Missing expected column '{district_col}' in gdf_districts for full map district processing.")
+            all_districts = []
+            break # Exit loop if critical column is missing
 
-        districts_in_state = temp_gdf_districts_year[state_districts_mask][district_col].dropna().unique().tolist()
-        n_districts = len(districts_in_state)
+        # Initialize dummy values for all districts for the current year
+        year_dummy_data = {d: np.nan for d in all_districts}
 
-        if n_districts > 0 and pd.notna(state_total_value):
-            # Fabricate values across districts using random proportions that sum to 1
-            proportions = np.random.dirichlet(np.ones(n_districts))
-            dummy_values = proportions * state_total_value
+        for index, row in df_current_year_states.iterrows():
+            state_name_from_data = row["State"]
+            state_total_value = row[metric]
 
-            # Assign fabricated values to Dummy_Value column for relevant districts
-            for i, district_name in enumerate(districts_in_state):
-                temp_gdf_districts_year.loc[
-                    (temp_gdf_districts_year[state_col].str.upper().str.replace(" ", "") == normalized_state_name_data) &
-                    (temp_gdf_districts_year[district_col] == district_name),
-                    "Dummy_Value"
-                ] = dummy_values[i]
-    animated_full_india_district_data.append(temp_gdf_districts_year)
+            normalized_state_name_data = state_name_from_data.upper().replace(" ", "")
 
-if animated_full_india_district_data:
-    # Concatenate all GeoDataFrames for animation
-    animated_full_india_districts_gdf = pd.concat(animated_full_india_district_data, ignore_index=True)
-    st.info(f"Total rows in animated_full_india_districts_gdf: {len(animated_full_india_districts_gdf)}")
-    st.info(f"Sample animated_full_india_districts_gdf head:\n{animated_full_india_districts_gdf.head().to_string()}")
+            # Get districts belonging to the current state from the master gdf_districts
+            if state_col in gdf_districts.columns:
+                state_districts = gdf_districts[
+                    gdf_districts[state_col].str.upper().str.replace(" ", "") == normalized_state_name_data
+                ][district_col].dropna().unique().tolist()
+            else:
+                st.error(f"Missing expected column '{state_col}' in gdf_districts for state-specific district filtering.")
+                state_districts = []
+                continue
 
-    # Convert the combined GeoDataFrame to GeoJSON for Plotly Express
-    full_india_districts_geojson = json.loads(animated_full_india_districts_gdf.to_json())
+            n_districts = len(state_districts)
 
-    # Create the animated full India district map
-    fig_full_india_districts = px.choropleth(
-        animated_full_india_districts_gdf,
-        geojson=full_india_districts_geojson,
-        locations=district_col,
-        featureidkey=f"properties.{district_col}",
-        color="Dummy_Value",
-        hover_name=district_col,
-        animation_frame="Year",
-        color_continuous_scale="YlOrRd",
-        title=f"Full India District Map - {metric} ({season}, {pulse_type}) Over Time (Fabricated Values)",
-        labels={"Dummy_Value": unit} # Use the same unit as the state map
-    )
+            if n_districts > 0 and pd.notna(state_total_value):
+                proportions = np.random.dirichlet(np.ones(n_districts))
+                dummy_values = proportions * state_total_value
 
-    # Layout adjustments for the full India district map
-    fig_full_india_districts.update_geos(fitbounds="locations", visible=False)
-    fig_full_india_districts.update_layout(
-        coloraxis_colorbar=dict(title=unit),
-        margin={"r": 0, "t": 40, "l": 0, "b": 0},
-        updatemenus=[{ # Play/Pause buttons
-            "type": "buttons",
-            "buttons": [
-                {
-                    "label": "Play",
-                    "method": "animate",
-                    "args": [None, {
-                        "frame": {"duration": 200, "redraw": True},
-                        "fromcurrent": True,
-                        "transition": {"duration": 0, "easing": "linear"}
-                    }]
-                },
-                {
-                    "label": "Pause",
-                    "method": "animate",
-                    "args": [[None], {
-                        "mode": "immediate",
-                        "frame": {"duration": 0},
-                        "transition": {"duration": 0}
-                    }]
-                }
-            ],
-            "direction": "left",
-            "pad": {"r": 10, "t": 87},
-            "showactive": False,
-            "x": 0.1,
-            "xanchor": "right",
-            "y": 0,
-            "yanchor": "top"
-        }],
-        sliders=[{ # Year slider for full India districts
-            "steps": [
-                {"args": [[year], {"frame": {"duration": 200, "redraw": True}, "mode": "immediate", "transition": {"duration": 0}}],
-                 "label": str(year), "method": "animate"}
-                for year in all_years_for_full_map
-            ],
-            "active": 0,
-            "transition": {"duration": 0},
-            "x": 0.1,
-            "pad": {"b": 10, "t": 50},
-            "len": 0.9
-        }]
-    )
-    # Ensure a consistent range for the color axis across all frames
-    color_min_full = animated_full_india_districts_gdf["Dummy_Value"].min()
-    color_max_full = animated_full_india_districts_gdf["Dummy_Value"].max()
-    fig_full_india_districts.update_coloraxes(cmin=color_min_full, cmax=color_max_full)
+                for i, district_name in enumerate(state_districts):
+                    year_dummy_data[district_name] = dummy_values[i]
+        
+        # Convert year_dummy_data to a DataFrame for the current year
+        df_year_fabricated = pd.DataFrame({
+            district_col: list(year_dummy_data.keys()),
+            "Dummy_Value": list(year_dummy_data.values()),
+            "Year": year
+        })
+        all_fabricated_district_data.append(df_year_fabricated)
 
-    st.plotly_chart(fig_full_india_districts, use_container_width=True)
+    if all_fabricated_district_data:
+        # Concatenate all fabricated data for all years
+        combined_fabricated_data_df = pd.concat(all_fabricated_district_data, ignore_index=True)
+        st.info(f"Combined fabricated data (DataFrame) rows: {len(combined_fabricated_data_df)}")
+        st.info(f"Sample combined_fabricated_data_df head:\n{combined_fabricated_data_df.head().to_string()}")
+
+        # Merge the master gdf_districts (geometries) with the combined fabricated data
+        # This will create a GeoDataFrame that contains all geometries and all-year fabricated data
+        animated_full_india_districts_gdf = gdf_districts.merge(
+            combined_fabricated_data_df,
+            on=district_col, # Merge on the district name column
+            how="left"
+        )
+        st.info(f"Final animated_full_india_districts_gdf rows after merge: {len(animated_full_india_districts_gdf)}")
+        st.info(f"Sample final animated_full_india_districts_gdf head:\n{animated_full_india_districts_gdf.head().to_string()}")
+
+        # Create the animated full India district map
+        fig_full_india_districts = px.choropleth(
+            animated_full_india_districts_gdf,
+            geojson=animated_full_india_districts_gdf.geometry.__geo_interface__, # Pass geometry interface
+            locations=district_col,
+            featureidkey=f"properties.{district_col}", # Match against properties in the GeoDataFrame
+            color="Dummy_Value",
+            hover_name=district_col,
+            animation_frame="Year",
+            color_continuous_scale="YlOrRd",
+            title=f"Full India District Map - {metric} ({season}, {pulse_type}) Over Time (Fabricated Values)",
+            labels={"Dummy_Value": unit}
+        )
+
+        fig_full_india_districts.update_geos(fitbounds="locations", visible=False)
+        fig_full_india_districts.update_layout(
+            coloraxis_colorbar=dict(title=unit),
+            margin={"r": 0, "t": 40, "l": 0, "b": 0},
+            updatemenus=[{
+                "type": "buttons",
+                "buttons": [
+                    {"label": "Play", "method": "animate", "args": [None, {"frame": {"duration": 200, "redraw": True}, "fromcurrent": True, "transition": {"duration": 0, "easing": "linear"}}]},
+                    {"label": "Pause", "method": "animate", "args": [[None], {"mode": "immediate", "frame": {"duration": 0}, "transition": {"duration": 0}}]}
+                ],
+                "direction": "left", "pad": {"r": 10, "t": 87}, "showactive": False, "x": 0.1, "xanchor": "right", "y": 0, "yanchor": "top"
+            }],
+            sliders=[{
+                "steps": [{"args": [[year], {"frame": {"duration": 200, "redraw": True}, "mode": "immediate", "transition": {"duration": 0}}],
+                           "label": str(year), "method": "animate"} for year in all_years_for_full_map],
+                "active": 0, "transition": {"duration": 0}, "x": 0.1, "pad": {"b": 10, "t": 50}, "len": 0.9
+            }]
+        )
+        color_min_full = animated_full_india_districts_gdf["Dummy_Value"].min()
+        color_max_full = animated_full_india_districts_gdf["Dummy_Value"].max()
+        fig_full_india_districts.update_coloraxes(cmin=color_min_full, cmax=color_max_full)
+        st.plotly_chart(fig_full_india_districts, use_container_width=True)
+    else:
+        st.warning("Could not generate animated full India district map. No fabricated data available.")
 else:
-    st.warning("Could not generate animated full India district map. No data available for the selected parameters.")
+    st.warning("Skipping Full India District Map rendering due to previous data loading errors or empty data.")
 
 
 # ---------- DISTRICT-WISE ANIMATED HISTORICAL PLOT (RANDOM VALUES) ----------
@@ -814,7 +595,6 @@ st.markdown("---")
 st.subheader("📽️ Animated District-wise Trend (Simulated Data)")
 
 if selected_state_map != "None":
-    # Filter districts for the selected state from the main gdf_districts
     if gdf_districts is not None and not gdf_districts.empty and state_col in gdf_districts.columns and district_col in gdf_districts.columns:
         filtered_districts_for_line_plot = gdf_districts[
             gdf_districts[state_col].str.upper().str.replace(" ", "") == normalized_selected_state
@@ -834,19 +614,16 @@ else:
     st.sidebar.warning("No districts available for selected state for trend plot.")
 
 if selected_district_for_line_plot:
-    # Simulate historical data (e.g., 2000–2023) for the selected district
     years_simulated = np.arange(2000, 2024)
-    np.random.seed(42) # For reproducibility of random values
+    np.random.seed(42)
     random_values_simulated = np.random.uniform(low=50, high=300, size=len(years_simulated))
 
-    # Create base dataframe for simulated district trend
     district_trend_simulated_df = pd.DataFrame({
         "Year": years_simulated,
         "Value": random_values_simulated,
         "District": selected_district_for_line_plot
     })
 
-    # Prepare cumulative animation frames for the simulated line plot
     animation_frames_district_line_simulated = []
     for year in years_simulated:
         frame_df = district_trend_simulated_df[district_trend_simulated_df["Year"] <= year].copy()
@@ -856,60 +633,24 @@ if selected_district_for_line_plot:
     animated_district_line_simulated_df = pd.concat(animation_frames_district_line_simulated, ignore_index=True)
     st.info(f"Animated simulated district line data rows: {len(animated_district_line_simulated_df)}")
 
-    # Axis limits for stable animation
     y_min_simulated = random_values_simulated.min() * 0.95
     y_max_simulated = random_values_simulated.max() * 1.05
 
-    # Create animated plot for simulated district trend
     fig_district_trend_simulated = px.line(
         animated_district_line_simulated_df,
-        x="Year",
-        y="Value",
-        animation_frame="FrameYear",
-        animation_group="District",
+        x="Year", y="Value", animation_frame="FrameYear", animation_group="District",
         title=f"Animated Trend for {selected_district_for_line_plot} (Simulated, {years_simulated.min()}–{years_simulated.max()})",
-        markers=True,
-        labels={"Year": "Year", "Value": "Simulated Value", "FrameYear": "Year"},
-        range_y=[y_min_simulated, y_max_simulated],
-        range_x=[years_simulated.min(), years_simulated.max()]
+        markers=True, labels={"Year": "Year", "Value": "Simulated Value", "FrameYear": "Year"},
+        range_y=[y_min_simulated, y_max_simulated], range_x=[years_simulated.min(), years_simulated.max()]
     )
 
-    # Add play/pause buttons for simulated line plot
     fig_district_trend_simulated.update_layout(
-        xaxis_title="Year",
-        yaxis_title="Simulated Metric",
-        font=dict(family="Poppins", size=12),
-        title_font_size=18,
-        sliders=[{
-            'currentvalue': {'prefix': 'Year: '},
-            'pad': {'t': 20}
-        }],
-        updatemenus=[{
-            'type': 'buttons',
-            'showactive': False,
-            'x': 0.05,
-            'y': -0.15,
-            'buttons': [
-                {
-                    'label': 'Play',
-                    'method': 'animate',
-                    'args': [None, {
-                        'frame': {'duration': 200, 'redraw': True},
-                        'fromcurrent': True,
-                        'transition': {'duration': 0}
-                    }]
-                },
-                {
-                    'label': 'Pause',
-                    'method': 'animate',
-                    "args": [[None], {
-                        'frame': {'duration': 50, 'redraw': False},
-                        'mode': 'immediate',
-                        'transition': {'duration': 0}
-                    }]
-                }
-            ]
-        }]
+        xaxis_title="Year", yaxis_title="Simulated Metric",
+        font=dict(family="Poppins", size=12), title_font_size=18,
+        sliders=[{'currentvalue': {'prefix': 'Year: '}, 'pad': {'t': 20}}],
+        updatemenus=[{'type': 'buttons', 'showactive': False, 'x': 0.05, 'y': -0.15,
+                      'buttons': [{'label': 'Play', 'method': 'animate', 'args': [None, {'frame': {'duration': 200, 'redraw': True}, 'fromcurrent': True, 'transition': {'duration': 0}}]},
+                                  {'label': 'Pause', 'method': 'animate', "args": [[None], {'frame': {'duration': 50, 'redraw': False}, 'mode': 'immediate', 'transition': {'duration': 0}}]}]}]
     )
     st.plotly_chart(fig_district_trend_simulated, use_container_width=True)
 else:
