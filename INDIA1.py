@@ -90,6 +90,7 @@ pulse_units = {
 }
 
 # Global flags for data loading success
+# Initialize as True, set to False if any critical error occurs
 data_loaded_successfully = True
 
 # --- Cached GeoJSON loading functions ---
@@ -107,6 +108,7 @@ def load_india_states_geojson(path="India_Shapefile/india_st.shp"):
         # Ensure consistent state names for merging with data
         gdf["State_Name"] = gdf["State_Name"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper() # Apply corrections and convert to uppercase
         st.info(f"Successfully loaded {len(gdf)} state geometries from '{path}'.")
+        st.info(f"Sample GeoJSON state names: {sorted(gdf['State_Name'].unique().tolist())[:5]}...") # Show sample
         return json.loads(gdf.to_json())
     except Exception as e:
         st.exception(f"Error loading India states GeoJSON from '{path}': {e}")
@@ -128,12 +130,14 @@ def load_india_districts_shapefile():
         # Normalize state names in the district shapefile as well
         gdf["ST_NM"] = gdf["ST_NM"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper() # Apply corrections and convert to uppercase
         st.info(f"Successfully loaded {len(gdf)} district geometries from '{path}'.")
+        st.info(f"Sample District shapefile state names: {sorted(gdf['ST_NM'].unique().tolist())[:5]}...") # Show sample
         return gdf
     except Exception as e:
         st.exception(f"Error loading India districts shapefile from '{path}': {e}")
         return None
 
 # Load GeoJSON data for states and districts once
+# These variables must be global or passed around
 india_states_geojson = load_india_states_geojson()
 gdf_districts = load_india_districts_shapefile()
 
@@ -145,7 +149,7 @@ else:
     # Filter out "India" if it somehow made it into state names in district shapefile
     # Ensure 'ST_NM' column exists before filtering
     if 'ST_NM' in gdf_districts.columns:
-        gdf_districts = gdf_districts[gdf_districts["ST_NM"] != "INDIA"]
+        gdf_districts = gdf_districts[gdf_districts["ST_NM"] != "INDIA"].copy() # Use .copy() to avoid SettingWithCopyWarning
     else:
         st.warning("'ST_NM' column not found in district shapefile. Cannot filter 'INDIA' state.")
 
@@ -173,7 +177,7 @@ if data_loaded_successfully:
         if not os.path.exists(excel_path):
             st.error(f"Error: Pulses data Excel file not found at '{excel_path}'. Please ensure the file exists.")
             data_loaded_successfully = False
-            # Exit this block if data file is not found
+            # The function will re-run, so a direct return is not needed, but setting flag is key.
         else:
             # Read the data from Excel
             df_pulses_raw = pd.read_excel(
@@ -182,6 +186,8 @@ if data_loaded_successfully:
                 header=1 # Header is in the second row (row 2 in Excel)
             )
             st.info(f"Successfully loaded raw data for '{pulse_type}' from '{excel_path}'. Original rows: {len(df_pulses_raw)}.")
+            st.info(f"Raw df_pulses_raw columns: {df_pulses_raw.columns.tolist()}")
+            st.info(f"Raw df_pulses_raw head:\n{df_pulses_raw.head().to_string()}")
 
             # Clean and preprocess data
             df_pulses_raw.columns = df_pulses_raw.columns.str.strip()
@@ -190,18 +196,20 @@ if data_loaded_successfully:
             # Ensure 'Season' column exists and filter
             if "Season" in df_pulses_raw.columns:
                 df_pulses_raw = df_pulses_raw[df_pulses_raw["Season"].str.lower() == season.lower()].copy() # Filter by season and create a copy
+                st.info(f"After Season filter, df_pulses_raw rows: {len(df_pulses_raw)}.")
             else:
-                st.warning("Season column not found in pulses data.")
+                st.warning("Season column not found in pulses data. Please check your Excel file structure.")
                 df_pulses_raw = pd.DataFrame() # Empty DataFrame if column is missing
 
-            if not df_pulses_raw.empty:
+            if not df_pulses_raw.empty and "Year" in df_pulses_raw.columns:
                 # Robust year parsing: Convert to string, split, then to numeric with error coercing
                 df_pulses_raw["Year_Processed"] = pd.to_numeric(
                     df_pulses_raw["Year"].astype(str).str.split('-').str[0],
                     errors='coerce'
                 )
                 # Drop rows where the processed year is NaN (conversion failed)
-                df_pulses_raw = df_pulses_raw.dropna(subset=["Year_Processed"])
+                df_pulses_raw = df_pulses_raw.dropna(subset=["Year_Processed"]).copy() # Use .copy()
+                st.info(f"After Year processing & NaN drop, df_pulses_raw rows: {len(df_pulses_raw)}.")
 
                 # Check if 'Year_Processed' is still empty after dropping NaNs
                 if not df_pulses_raw.empty:
@@ -210,23 +218,29 @@ if data_loaded_successfully:
                     # Drop the temporary column
                     df_pulses_raw = df_pulses_raw.drop(columns=["Year_Processed"])
                 else:
-                    st.warning("No valid 'Year' data after processing. Check 'Year' column in Excel.")
+                    st.warning("No valid 'Year' data after processing. Check 'Year' column in Excel for non-numeric values.")
                     df_pulses_raw = pd.DataFrame() # Empty if no valid years
+            elif not df_pulses_raw.empty: # if df_pulses_raw has data but Year column is missing
+                st.warning("Year column not found in pulses data. Please check your Excel file structure.")
+                df_pulses_raw = pd.DataFrame() # Empty if Year column is missing
+
 
             # Ensure metric column exists and is numeric
-            if metric in df_pulses_raw.columns:
+            if not df_pulses_raw.empty and metric in df_pulses_raw.columns:
                 df_pulses_raw[metric] = pd.to_numeric(df_pulses_raw[metric], errors="coerce") # Coerce metric column to numeric
-                df_pulses_raw = df_pulses_raw.dropna(subset=[metric]) # Drop rows where the metric is missing
-            else:
-                st.warning(f"Metric column '{metric}' not found in pulses data.")
+                df_pulses_raw = df_pulses_raw.dropna(subset=[metric]).copy() # Use .copy()
+                st.info(f"After Metric processing & NaN drop, df_pulses_raw rows: {len(df_pulses_raw)}.")
+            elif not df_pulses_raw.empty: # if df_pulses_raw has data but metric column is missing
+                st.warning(f"Metric column '{metric}' not found in pulses data. Please check your Excel file structure.")
                 df_pulses_raw = pd.DataFrame() # Empty if metric column is missing
 
+
             # Normalize state names in the DataFrame for consistent merging with GeoJSON
-            if "State" in df_pulses_raw.columns:
+            if not df_pulses_raw.empty and "State" in df_pulses_raw.columns:
                 df_pulses_raw["State"] = df_pulses_raw["State"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper() # Apply corrections and convert to uppercase
                 st.info(f"Unique state names from Pulses Data (after normalization): {sorted(df_pulses_raw['State'].unique().tolist())}")
-            else:
-                st.warning("State column not found in pulses data.")
+            elif not df_pulses_raw.empty: # if df_pulses_raw has data but State column is missing
+                st.warning("State column not found in pulses data. Please check your Excel file structure.")
                 df_pulses_raw = pd.DataFrame() # Empty if state column is missing
 
 
@@ -234,11 +248,12 @@ if data_loaded_successfully:
             if not df_pulses_raw.empty and "Year" in df_pulses_raw.columns:
                 min_year = int(df_pulses_raw["Year"].min())
                 max_year = int(df_pulses_raw["Year"].max())
+                st.info(f"Calculated year range from raw data: {min_year}-{max_year}")
             else:
                 min_year = 0
                 max_year = 0
-                st.warning("Cannot determine year range as pulses data is empty or 'Year' column is missing after processing.")
-                data_loaded_successfully = False # Mark data loading as unsuccessful if no years
+                st.warning("Cannot determine year range as pulses data is empty or 'Year' column is missing after processing. Decade selection will be unavailable.")
+                data_loaded_successfully = False # Mark data loading as unsuccessful if no years for decades
 
             # Generate decade options
             decade_options = []
@@ -253,8 +268,7 @@ if data_loaded_successfully:
                     current_decade_start += 10 # Move to the next decade
 
             # Add a dropdown for decade selection
-            # Only show dropdown if there are valid decade options
-            selected_decade_range = None
+            selected_decade_range = None # Initialize to None
             if decade_options:
                 selected_decade_range = st.selectbox("Select Decade Range", decade_options)
                 # Filter df_pulses based on the selected decade range
@@ -277,6 +291,10 @@ if data_loaded_successfully:
             # Check if df_pulses is empty after filtering
             if df_pulses.empty:
                 st.warning("No data found for the selected Season, Pulse Type, Metric, and Decade. Please adjust your selections.")
+            elif india_states_geojson is None: # Check if GeoJSON is loaded
+                 st.warning("India states GeoJSON is not loaded. Cannot display map.")
+            elif "State" not in df_pulses.columns or metric not in df_pulses.columns or "Year" not in df_pulses.columns:
+                 st.warning("Required columns (State, Metric, Year) missing in filtered pulses data. Cannot display map.")
             else:
                 # Create choropleth map with animation using Plotly Express
                 fig_india_pulses = px.choropleth(
@@ -395,6 +413,7 @@ if data_loaded_successfully and selected_state_map != "None" and state_col and d
         state_gdf_filtered = gdf_districts[
             gdf_districts[state_col].str.upper().str.replace(" ", "") == normalized_selected_state
         ].copy() # Create a copy to avoid SettingWithCopyWarning
+        st.info(f"State GeoDataFrame filtered for '{selected_state_map}'. Rows: {len(state_gdf_filtered)}")
     else:
         st.error(f"Missing expected column '{state_col}' in district shapefile for state filtering.")
         state_gdf_filtered = gpd.GeoDataFrame() # Empty GeoDataFrame to prevent further errors
@@ -408,13 +427,14 @@ if data_loaded_successfully and selected_state_map != "None" and state_col and d
             state_historical_df = df_pulses[ # Uses the already filtered df_pulses
                 df_pulses["State"].str.upper().str.replace(" ", "") == normalized_selected_state
             ].copy()
+            st.info(f"State historical data (from df_pulses) for '{selected_state_map}'. Rows: {len(state_historical_df)}")
         else:
             st.warning("Pulses data (df_pulses) is empty or missing required columns for state historical data.")
             state_historical_df = pd.DataFrame()
 
 
         if state_historical_df.empty:
-            st.warning(f"No pulse data available for {selected_state_map} for {season} - {pulse_type} - {metric} over time within the selected decade.")
+            st.warning(f"No pulse data available for {selected_state_map} for {season} - {pulse_type} - {metric} over time within the selected decade. Skipping state map plot.")
         else:
             # Prepare a list to store data for animated district map (for all years)
             animated_state_district_data = []
@@ -435,7 +455,7 @@ if data_loaded_successfully and selected_state_map != "None" and state_col and d
                     districts_in_state = state_gdf_filtered[district_col].dropna().unique().tolist()
                 else:
                     districts_in_state = []
-                    st.warning(f"District column '{district_col}' not found in filtered state GeoDataFrame.")
+                    st.warning(f"District column '{district_col}' not found in filtered state GeoDataFrame for data fabrication.")
 
                 n_districts = len(districts_in_state)
 
@@ -465,6 +485,9 @@ if data_loaded_successfully and selected_state_map != "None" and state_col and d
                     right_on=district_col,
                     how="left"
                 )
+                st.info(f"Merged district GeoDataFrame rows: {len(merged_district_gdf)}")
+                st.info(f"Sample merged_district_gdf head:\n{merged_district_gdf.head().to_string()}")
+
 
                 # Convert the merged GeoDataFrame to GeoJSON dictionary for Plotly Express
                 state_districts_geojson = json.loads(merged_district_gdf.to_json())
@@ -541,7 +564,7 @@ if data_loaded_successfully and selected_state_map != "None" and state_col and d
 
                 st.plotly_chart(fig_state_districts, use_container_width=True)
             else:
-                st.warning(f"Could not generate animated district map for {selected_state_map}.")
+                st.warning(f"Could not generate animated district map for {selected_state_map}. Animated data list was empty.")
 
 
         # ---------- STATE-WISE ANIMATED HISTORICAL PLOT (LINE CHART) ----------
@@ -566,6 +589,8 @@ if data_loaded_successfully and selected_state_map != "None" and state_col and d
                     animation_frames_line.append(frame_data)
 
                 animated_state_line_df = pd.concat(animation_frames_line, ignore_index=True)
+                st.info(f"Animated state line data rows: {len(animated_state_line_df)}")
+
 
                 # Set fixed axis limits for stable animation view
                 if not animated_state_line_df.empty and metric in animated_state_line_df.columns:
@@ -575,7 +600,7 @@ if data_loaded_successfully and selected_state_map != "None" and state_col and d
                     x_max_state = animated_state_line_df["Year"].max()
                 else:
                     y_min_state, y_max_state, x_min_state, x_max_state = 0, 1, 0, 1 # Default values
-                    st.warning("Could not determine axis limits for state historical plot.")
+                    st.warning("Could not determine axis limits for state historical plot. Data might be empty or missing metric column.")
 
 
                 # Create the animated line plot
@@ -596,7 +621,7 @@ if data_loaded_successfully and selected_state_map != "None" and state_col and d
                 fig_state_trend.update_layout(
                     yaxis_title=y_axis_title,
                     xaxis_title="Year",
-                    font=dict(family="Poppins, sans-serif", size=12),
+                    font=dict(family="Poppins", size=12),
                     title_font_size=18,
                     legend_title="Metric",
                     sliders=[{ # Year slider for line chart
@@ -634,9 +659,9 @@ if data_loaded_successfully and selected_state_map != "None" and state_col and d
 
                 st.plotly_chart(fig_state_trend, use_container_width=True)
             else:
-                st.warning(f"No historical data with values for '{metric}' is available to plot a trend for {selected_state_map}.")
+                st.warning(f"No historical data with values for '{metric}' is available to plot a trend for {selected_state_map}. Animated data list was empty or missing metric.")
         else:
-            st.warning(f"Required columns ('Year' or '{metric}') are missing in historical data for {selected_state_map}.")
+            st.warning(f"Required columns ('Year' or '{metric}') are missing in historical data for {selected_state_map}. Skipping state line plot.")
 else:
     st.warning("Skipping State Map rendering due to previous data loading errors.")
 
@@ -655,6 +680,7 @@ animated_full_india_district_data = []
 # Ensure df_pulses is not empty and has 'Year' column before attempting to get unique years
 if data_loaded_successfully and not df_pulses.empty and "Year" in df_pulses.columns and metric in df_pulses.columns and "State" in df_pulses.columns:
     all_years_for_full_map = sorted(df_pulses["Year"].unique())
+    st.info(f"Years for Full India District Map: {all_years_for_full_map}")
 else:
     all_years_for_full_map = [] # Set to empty list if df_pulses is empty or columns are missing
     st.warning("Skipping Full India District Map data processing due to previous data loading errors or empty data.")
@@ -663,6 +689,7 @@ else:
 for year in all_years_for_full_map:
     # Get state data for the current year
     df_current_year_states = df_pulses[df_pulses["Year"] == year].copy()
+    st.info(f"Processing Year: {year} for Full India District Map. States with data: {len(df_current_year_states)}")
 
     # Create a temporary GeoDataFrame for this year's district data
     temp_gdf_districts_year = gdf_districts.copy() # gdf_districts is initialized globally
@@ -688,7 +715,7 @@ for year in all_years_for_full_map:
         n_districts = len(districts_in_state)
 
         if n_districts > 0 and pd.notna(state_total_value):
-            # Fabricate values across districts using random proportions that sum up to the state's total
+            # Fabricate values across districts using random proportions that sum to 1
             proportions = np.random.dirichlet(np.ones(n_districts))
             dummy_values = proportions * state_total_value
 
@@ -704,6 +731,8 @@ for year in all_years_for_full_map:
 if animated_full_india_district_data:
     # Concatenate all GeoDataFrames for animation
     animated_full_india_districts_gdf = pd.concat(animated_full_india_district_data, ignore_index=True)
+    st.info(f"Total rows in animated_full_india_districts_gdf: {len(animated_full_india_districts_gdf)}")
+    st.info(f"Sample animated_full_india_districts_gdf head:\n{animated_full_india_districts_gdf.head().to_string()}")
 
     # Convert the combined GeoDataFrame to GeoJSON for Plotly Express
     full_india_districts_geojson = json.loads(animated_full_india_districts_gdf.to_json())
@@ -791,6 +820,7 @@ if selected_state_map != "None":
             gdf_districts[state_col].str.upper().str.replace(" ", "") == normalized_selected_state
         ][district_col].dropna().unique().tolist()
         filtered_districts_for_line_plot = sorted(filtered_districts_for_line_plot)
+        st.info(f"Filtered districts for line plot: {filtered_districts_for_line_plot}")
     else:
         st.warning("GeoDataFrame for districts is not loaded or missing required columns for district filter.")
         filtered_districts_for_line_plot = []
@@ -824,6 +854,7 @@ if selected_district_for_line_plot:
         animation_frames_district_line_simulated.append(frame_df)
 
     animated_district_line_simulated_df = pd.concat(animation_frames_district_line_simulated, ignore_index=True)
+    st.info(f"Animated simulated district line data rows: {len(animated_district_line_simulated_df)}")
 
     # Axis limits for stable animation
     y_min_simulated = random_values_simulated.min() * 0.95
@@ -847,7 +878,7 @@ if selected_district_for_line_plot:
     fig_district_trend_simulated.update_layout(
         xaxis_title="Year",
         yaxis_title="Simulated Metric",
-        font=dict(family="Poppins, sans-serif", size=12),
+        font=dict(family="Poppins", size=12),
         title_font_size=18,
         sliders=[{
             'currentvalue': {'prefix': 'Year: '},
@@ -871,7 +902,7 @@ if selected_district_for_line_plot:
                 {
                     'label': 'Pause',
                     'method': 'animate',
-                    'args': [[None], {
+                    "args": [[None], {
                         'frame': {'duration': 50, 'redraw': False},
                         'mode': 'immediate',
                         'transition': {'duration': 0}
