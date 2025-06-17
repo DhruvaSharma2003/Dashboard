@@ -114,6 +114,8 @@ gdf_districts = load_india_districts_shapefile()
 # Filter out "India" if it somehow made it into state names in district shapefile
 gdf_districts = gdf_districts[gdf_districts["ST_NM"] != "INDIA"]
 
+# Initialize df_pulses outside the try block
+df_pulses = pd.DataFrame()
 
 # ---------- INDIA PULSES CHOROPLETH MAP ----------
 st.subheader("🇮🇳 India Pulses Choropleth Map Over Time")
@@ -140,6 +142,9 @@ try:
     df_pulses_raw = df_pulses_raw.rename(columns={"States/UTs": "State"})
     df_pulses_raw = df_pulses_raw[df_pulses_raw["Season"].str.lower() == season.lower()].copy() # Filter by season and create a copy
 
+    # Drop rows where 'Year' is NaN before attempting to convert to int
+    df_pulses_raw = df_pulses_raw.dropna(subset=["Year"])
+
     # Parse 'Year' column: take the first part if it's a range (e.g., "2000-01" -> 2000)
     df_pulses_raw["Year"] = df_pulses_raw["Year"].astype(str).str.split('-').str[0].astype(int)
     df_pulses_raw[metric] = pd.to_numeric(df_pulses_raw[metric], errors="coerce") # Coerce metric column to numeric
@@ -149,29 +154,38 @@ try:
     df_pulses_raw["State"] = df_pulses_raw["State"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper() # Apply corrections and convert to uppercase
 
     # Determine available years and create decade ranges
-    min_year = int(df_pulses_raw["Year"].min())
-    max_year = int(df_pulses_raw["Year"].max())
+    if not df_pulses_raw.empty:
+        min_year = int(df_pulses_raw["Year"].min())
+        max_year = int(df_pulses_raw["Year"].max())
+    else:
+        min_year = 0
+        max_year = 0
 
     # Generate decade options
     decade_options = []
-    current_decade_start = (min_year // 10) * 10
-    while current_decade_start <= max_year:
-        decade_end = current_decade_start + 9
-        if decade_end > max_year: # If the decade extends beyond max_year, clip it
-            decade_end = max_year
-        decade_string = f"{current_decade_start}-{decade_end}"
-        decade_options.append(decade_string)
-        current_decade_start += 10 # Move to the next decade
+    if min_year != 0 or max_year != 0: # Only generate decades if there's actual data
+        current_decade_start = (min_year // 10) * 10
+        while current_decade_start <= max_year:
+            decade_end = current_decade_start + 9
+            if decade_end > max_year: # If the decade extends beyond max_year, clip it
+                decade_end = max_year
+            decade_string = f"{current_decade_start}-{decade_end}"
+            decade_options.append(decade_string)
+            current_decade_start += 10 # Move to the next decade
 
     # Add a dropdown for decade selection
-    selected_decade_range = st.selectbox("Select Decade Range", decade_options)
-
-    # Filter df_pulses based on the selected decade range
-    start_year_decade, end_year_decade = map(int, selected_decade_range.split('-'))
-    df_pulses = df_pulses_raw[
-        (df_pulses_raw["Year"] >= start_year_decade) &
-        (df_pulses_raw["Year"] <= end_year_decade)
-    ].copy() # Use a copy to avoid modifying the raw DataFrame for other uses
+    # Only show dropdown if there are valid decade options
+    if decade_options:
+        selected_decade_range = st.selectbox("Select Decade Range", decade_options)
+        # Filter df_pulses based on the selected decade range
+        start_year_decade, end_year_decade = map(int, selected_decade_range.split('-'))
+        df_pulses = df_pulses_raw[
+            (df_pulses_raw["Year"] >= start_year_decade) &
+            (df_pulses_raw["Year"] <= end_year_decade)
+        ].copy() # Use a copy to avoid modifying the raw DataFrame for other uses
+    else:
+        st.warning("No complete decade ranges found for the selected filters.")
+        df_pulses = pd.DataFrame() # Ensure df_pulses is empty if no decades are generated
 
     # Determine unit for the map title and colorbar
     pulse_units = {
@@ -180,7 +194,7 @@ try:
         "Yield": "Kg/Hectare"
     }
     unit = pulse_units.get(metric, "Unit") # Default to "Unit" if not found
-    title = f"{pulse_type} - {season} - {metric} Over Time ({unit}) in {selected_decade_range}"
+    title = f"{pulse_type} - {season} - {metric} Over Time ({unit}) in {selected_decade_range if 'selected_decade_range' in locals() else 'All Years'}"
 
     # Check if df_pulses is empty after filtering
     if df_pulses.empty:
@@ -256,7 +270,8 @@ try:
         st.plotly_chart(fig_india_pulses, use_container_width=True)
 
 except Exception as e:
-    st.error(f"An error occurred loading India Pulses Map: {e}")
+    st.error(f"An error occurred loading India Pulses Map: {e}. Please check your data and selections.")
+    df_pulses = pd.DataFrame() # Ensure df_pulses is an empty DataFrame on error
 
 
 # This DataFrame contains all states and years for the selected season/pulse type.
@@ -539,7 +554,11 @@ st.subheader("🇮🇳 Full India District Map View (Fabricated Values)")
 animated_full_india_district_data = []
 
 # Get all unique years from the main df_pulses dataframe
-all_years_for_full_map = sorted(df_pulses["Year"].unique())
+# Ensure df_pulses is not empty before attempting to get unique years
+if not df_pulses.empty:
+    all_years_for_full_map = sorted(df_pulses["Year"].unique())
+else:
+    all_years_for_full_map = [] # Set to empty list if df_pulses is empty
 
 for year in all_years_for_full_map:
     # Get state data for the current year
