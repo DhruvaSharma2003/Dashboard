@@ -84,6 +84,7 @@ def load_india_states_geojson(path="India_Shapefile/india_st.shp"):
         "Dadra & Nagar Haveli": "Dadara & Nagar Havelli",
         "Delhi": "NCT of Delhi"
     }).str.upper() # Convert to uppercase for consistent matching
+    st.info(f"Unique state names from GeoJSON (after normalization): {sorted(gdf['State_Name'].unique().tolist())}")
     return json.loads(gdf.to_json())
 
 @st.cache_data
@@ -162,6 +163,10 @@ try:
         "Delhi": "NCT of Delhi"
     }).str.upper() # Convert to uppercase for consistent matching
 
+    st.info(f"Unique state names from Pulses Data (after normalization): {sorted(df_pulses['State'].unique().tolist())}")
+    st.info(f"Years available in Pulses Data: {sorted(df_pulses['Year'].unique().tolist())}")
+
+
     # Determine unit for the map title and colorbar
     pulse_units = {
         "Area": "'000 Hectare",
@@ -171,74 +176,78 @@ try:
     unit = pulse_units.get(metric, "Unit") # Default to "Unit" if not found
     title = f"{pulse_type} - {season} - {metric} Over Time ({unit})"
 
-    # Create choropleth map with animation using Plotly Express
-    fig_india_pulses = px.choropleth(
-        df_pulses,
-        geojson=india_states_geojson,
-        locations="State", # Column in df_pulses with state names
-        featureidkey="properties.State_Name", # Property in GeoJSON for matching state names
-        color=metric, # Column to determine color
-        hover_name="State", # Column for hover information
-        animation_frame="Year", # Column to animate over
-        color_continuous_scale="YlGnBu", # Color scale
-        title=title, # Map title
-        labels={metric: unit} # Set colorbar label
-    )
+    # Check if df_pulses is empty after filtering
+    if df_pulses.empty:
+        st.warning("No data found for the selected Season, Pulse Type, and Metric. Please adjust your selections.")
+    else:
+        # Create choropleth map with animation using Plotly Express
+        fig_india_pulses = px.choropleth(
+            df_pulses,
+            geojson=india_states_geojson,
+            locations="State", # Column in df_pulses with state names
+            featureidkey="properties.State_Name", # Property in GeoJSON for matching state names
+            color=metric, # Column to determine color
+            hover_name="State", # Column for hover information
+            animation_frame="Year", # Column to animate over
+            color_continuous_scale="YlGnBu", # Color scale
+            title=title, # Map title
+            labels={metric: unit} # Set colorbar label
+        )
 
-    # Layout adjustments for the map
-    fig_india_pulses.update_geos(fitbounds="locations", visible=False) # Fit map to India bounds
-    fig_india_pulses.update_layout(
-        coloraxis_colorbar=dict(title=unit), # Colorbar title
-        margin={"r": 0, "t": 40, "l": 0, "b": 0}, # Margins
-        updatemenus=[{ # Play/Pause buttons
-            "type": "buttons",
-            "buttons": [
-                {
-                    "label": "Play",
-                    "method": "animate",
-                    "args": [None, {
-                        "frame": {"duration": 200, "redraw": True}, # Animation speed
-                        "fromcurrent": True,
-                        "transition": {"duration": 0, "easing": "linear"}
-                    }]
-                },
-                {
-                    "label": "Pause",
-                    "method": "animate",
-                    "args": [[None], {
-                        "mode": "immediate", # Immediate stop on pause
-                        "frame": {"duration": 0},
-                        "transition": {"duration": 0}
-                    }]
-                }
-            ],
-            "direction": "left",
-            "pad": {"r": 10, "t": 87},
-            "showactive": False,
-            "x": 0.1,
-            "xanchor": "right",
-            "y": 0,
-            "yanchor": "top"
-        }],
-        sliders=[{ # Year slider
-            "steps": [
-                {"args": [[year], {"frame": {"duration": 200, "redraw": True}, "mode": "immediate", "transition": {"duration": 0}}],
-                 "label": str(year), "method": "animate"}
-                for year in sorted(df_pulses["Year"].unique()) # Steps for each unique year
-            ],
-            "active": 0, # Start at the first year
-            "transition": {"duration": 0},
-            "x": 0.1,
-            "pad": {"b": 10, "t": 50},
-            "len": 0.9 # Length of the slider
-        }]
-    )
-    # Ensure a consistent range for the color axis across all frames
-    color_min = df_pulses[metric].min()
-    color_max = df_pulses[metric].max()
-    fig_india_pulses.update_coloraxes(cmin=color_min, cmax=color_max)
+        # Layout adjustments for the map
+        fig_india_pulses.update_geos(fitbounds="locations", visible=False) # Fit map to India bounds
+        fig_india_pulses.update_layout(
+            coloraxis_colorbar=dict(title=unit), # Colorbar title
+            margin={"r": 0, "t": 40, "l": 0, "b": 0}, # Margins
+            updatemenus=[{ # Play/Pause buttons
+                "type": "buttons",
+                "buttons": [
+                    {
+                        "label": "Play",
+                        "method": "animate",
+                        "args": [None, {
+                            "frame": {"duration": 200, "redraw": True}, # Animation speed
+                            "fromcurrent": True,
+                            "transition": {"duration": 0, "easing": "linear"}
+                        }]
+                    },
+                    {
+                        "label": "Pause",
+                        "method": "animate",
+                        "args": [[None], {
+                            "mode": "immediate", # Immediate stop on pause
+                            "frame": {"duration": 0},
+                            "transition": {"duration": 0}
+                        }]
+                    }
+                ],
+                "direction": "left",
+                "pad": {"r": 10, "t": 87},
+                "showactive": False,
+                "x": 0.1,
+                "xanchor": "right",
+                "y": 0,
+                "yanchor": "top"
+            }],
+            sliders=[{ # Year slider
+                "steps": [
+                    {"args": [[year], {"frame": {"duration": 200, "redraw": True}, "mode": "immediate", "transition": {"duration": 0}}],
+                     "label": str(year), "method": "animate"}
+                    for year in sorted(df_pulses["Year"].unique()) # Steps for each unique year
+                ],
+                "active": 0, # Start at the first year
+                "transition": {"duration": 0},
+                "x": 0.1,
+                "pad": {"b": 10, "t": 50},
+                "len": 0.9 # Length of the slider
+            }]
+        )
+        # Ensure a consistent range for the color axis across all frames
+        color_min = df_pulses[metric].min()
+        color_max = df_pulses[metric].max()
+        fig_india_pulses.update_coloraxes(cmin=color_min, cmax=color_max)
 
-    st.plotly_chart(fig_india_pulses, use_container_width=True)
+        st.plotly_chart(fig_india_pulses, use_container_width=True)
 
 except Exception as e:
     st.error(f"An error occurred loading India Pulses Map: {e}")
@@ -246,7 +255,11 @@ except Exception as e:
 
 # This DataFrame contains all states and years for the selected season/pulse type.
 # It's used to populate the state selection dropdown dynamically.
-available_states_for_dropdown = df_pulses["State"].unique().tolist()
+# Ensure this is only run if df_pulses is not empty from the try-except block
+if 'df_pulses' in locals() and not df_pulses.empty:
+    available_states_for_dropdown = df_pulses["State"].unique().tolist()
+else:
+    available_states_for_dropdown = []
 
 
 # ---------- STATE MAP VIEW ----------
