@@ -63,6 +63,26 @@ if "selected_type" not in st.session_state:
     st.session_state.selected_type = None
 
 
+# Define a common mapping for state/UT names to ensure consistency
+STATE_NAME_CORRECTIONS = {
+    "Orissa": "Odisha",
+    "Jammu & Kashmir": "Jammu and Kashmir",
+    "Chhattisgarh": "Chhattishgarh",
+    "Telangana": "Telengana", # Common historical spelling
+    "Tamil Nadu": "Tamilnadu",
+    "Kerela": "Kerala",
+    "Andaman & Nicobar Islands": "Andaman & Nicobar", # Consistent UT name
+    "Arunachal Pradesh": "Arunanchal Pradesh",
+    "Dadra & Nagar Haveli": "Dadara & Nagar Havelli",
+    "Delhi": "NCT of Delhi", # Specific for NCT
+    "Puducherry": "Puducherry", # Ensure consistent spelling for Puducherry
+    "Lakshadweep": "Lakshadweep", # Add Lakshadweep if it appears
+    "Chandigarh": "Chandigarh", # Add Chandigarh if it appears
+    "Daman & Diu": "Daman & Diu", # Add Daman & Diu if it appears
+    "Ladakh": "Ladakh" # Add Ladakh if it appears (post 2019 UT)
+}
+
+
 # --- Cached GeoJSON loading functions ---
 @st.cache_data
 def load_india_states_geojson(path="India_Shapefile/india_st.shp"):
@@ -72,19 +92,7 @@ def load_india_states_geojson(path="India_Shapefile/india_st.shp"):
     """
     gdf = gpd.read_file(path)
     # Ensure consistent state names for merging with data
-    gdf["State_Name"] = gdf["State_Name"].str.strip().replace({
-        "Orissa": "Odisha",
-        "Jammu & Kashmir": "Jammu and Kashmir",
-        "Chhattisgarh": "Chhattishgarh",
-        "Telangana": "Telengana",
-        "Tamil Nadu": "Tamilnadu",
-        "Kerela": "Kerala",
-        "Andaman & Nicobar Islands": "Andaman & Nicobar",
-        "Arunachal Pradesh": "Arunanchal Pradesh",
-        "Dadra & Nagar Haveli": "Dadara & Nagar Havelli",
-        "Delhi": "NCT of Delhi"
-    }).str.upper() # Convert to uppercase for consistent matching
-    st.info(f"Unique state names from GeoJSON (after normalization): {sorted(gdf['State_Name'].unique().tolist())}")
+    gdf["State_Name"] = gdf["State_Name"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper() # Apply corrections and convert to uppercase
     return json.loads(gdf.to_json())
 
 @st.cache_data
@@ -96,19 +104,7 @@ def load_india_districts_shapefile():
     gdf = gpd.read_file("India_Shapefile/State/2011_Dist.shp")
     gdf = gdf.set_crs(epsg=4326, inplace=False)
     # Normalize state names in the district shapefile as well
-    gdf["ST_NM"] = gdf["ST_NM"].str.strip().replace({
-        "Orissa": "Odisha",
-        "Jammu & Kashmir": "Jammu and Kashmir",
-        "Chhattisgarh": "Chhattishgarh",
-        "Telangana": "Telengana",
-        "Tamil Nadu": "Tamilnadu",
-        "Kerela": "Kerala",
-        "Andaman & Nicobar Islands": "Andaman & Nicobar",
-        "Arunachal Pradesh": "Arunanchal Pradesh",
-        "Dadra & Nagar Haveli": "Dadara & Nagar Havelli",
-        "India": None, # Exclude "India" if it appears in state names
-        "Delhi": "NCT of Delhi"
-    }).str.upper() # Convert to uppercase for consistent matching
+    gdf["ST_NM"] = gdf["ST_NM"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper() # Apply corrections and convert to uppercase
     return gdf
 
 # Load GeoJSON data for states and districts once
@@ -133,39 +129,49 @@ with st.sidebar:
 
 try:
     # Read the data from Excel
-    df_pulses = pd.read_excel(
+    df_pulses_raw = pd.read_excel( # Renamed to df_pulses_raw to keep original
         "Data/Pulses_Data.xlsx",
         sheet_name=pulse_type,
         header=1 # Header is in the second row (row 2 in Excel)
     )
 
     # Clean and preprocess data
-    df_pulses.columns = df_pulses.columns.str.strip()
-    df_pulses = df_pulses.rename(columns={"States/UTs": "State"})
-    df_pulses = df_pulses[df_pulses["Season"].str.lower() == season.lower()].copy() # Filter by season and create a copy
+    df_pulses_raw.columns = df_pulses_raw.columns.str.strip()
+    df_pulses_raw = df_pulses_raw.rename(columns={"States/UTs": "State"})
+    df_pulses_raw = df_pulses_raw[df_pulses_raw["Season"].str.lower() == season.lower()].copy() # Filter by season and create a copy
 
     # Parse 'Year' column: take the first part if it's a range (e.g., "2000-01" -> 2000)
-    df_pulses["Year"] = df_pulses["Year"].astype(str).str.split('-').str[0].astype(int)
-    df_pulses[metric] = pd.to_numeric(df_pulses[metric], errors="coerce") # Coerce metric column to numeric
-    df_pulses = df_pulses.dropna(subset=[metric]) # Drop rows where the metric is missing
+    df_pulses_raw["Year"] = df_pulses_raw["Year"].astype(str).str.split('-').str[0].astype(int)
+    df_pulses_raw[metric] = pd.to_numeric(df_pulses_raw[metric], errors="coerce") # Coerce metric column to numeric
+    df_pulses_raw = df_pulses_raw.dropna(subset=[metric]) # Drop rows where the metric is missing
 
     # Normalize state names in the DataFrame for consistent merging with GeoJSON
-    df_pulses["State"] = df_pulses["State"].str.strip().replace({
-        "Orissa": "Odisha",
-        "Jammu & Kashmir": "Jammu and Kashmir",
-        "Chhattisgarh": "Chhattishgarh",
-        "Telangana": "Telengana",
-        "Tamil Nadu": "Tamilnadu",
-        "Kerela": "Kerala",
-        "Andaman & Nicobar Islands": "Andaman & Nicobar",
-        "Arunachal Pradesh": "Arunanchal Pradesh",
-        "Dadra & Nagar Haveli": "Dadara & Nagar Havelli",
-        "Delhi": "NCT of Delhi"
-    }).str.upper() # Convert to uppercase for consistent matching
+    df_pulses_raw["State"] = df_pulses_raw["State"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper() # Apply corrections and convert to uppercase
 
-    st.info(f"Unique state names from Pulses Data (after normalization): {sorted(df_pulses['State'].unique().tolist())}")
-    st.info(f"Years available in Pulses Data: {sorted(df_pulses['Year'].unique().tolist())}")
+    # Determine available years and create decade ranges
+    min_year = int(df_pulses_raw["Year"].min())
+    max_year = int(df_pulses_raw["Year"].max())
 
+    # Generate decade options
+    decade_options = []
+    current_decade_start = (min_year // 10) * 10
+    while current_decade_start <= max_year:
+        decade_end = current_decade_start + 9
+        if decade_end > max_year: # If the decade extends beyond max_year, clip it
+            decade_end = max_year
+        decade_string = f"{current_decade_start}-{decade_end}"
+        decade_options.append(decade_string)
+        current_decade_start += 10 # Move to the next decade
+
+    # Add a dropdown for decade selection
+    selected_decade_range = st.selectbox("Select Decade Range", decade_options)
+
+    # Filter df_pulses based on the selected decade range
+    start_year_decade, end_year_decade = map(int, selected_decade_range.split('-'))
+    df_pulses = df_pulses_raw[
+        (df_pulses_raw["Year"] >= start_year_decade) &
+        (df_pulses_raw["Year"] <= end_year_decade)
+    ].copy() # Use a copy to avoid modifying the raw DataFrame for other uses
 
     # Determine unit for the map title and colorbar
     pulse_units = {
@@ -174,11 +180,11 @@ try:
         "Yield": "Kg/Hectare"
     }
     unit = pulse_units.get(metric, "Unit") # Default to "Unit" if not found
-    title = f"{pulse_type} - {season} - {metric} Over Time ({unit})"
+    title = f"{pulse_type} - {season} - {metric} Over Time ({unit}) in {selected_decade_range}"
 
     # Check if df_pulses is empty after filtering
     if df_pulses.empty:
-        st.warning("No data found for the selected Season, Pulse Type, and Metric. Please adjust your selections.")
+        st.warning("No data found for the selected Season, Pulse Type, Metric, and Decade. Please adjust your selections.")
     else:
         # Create choropleth map with animation using Plotly Express
         fig_india_pulses = px.choropleth(
@@ -233,7 +239,7 @@ try:
                 "steps": [
                     {"args": [[year], {"frame": {"duration": 200, "redraw": True}, "mode": "immediate", "transition": {"duration": 0}}],
                      "label": str(year), "method": "animate"}
-                    for year in sorted(df_pulses["Year"].unique()) # Steps for each unique year
+                    for year in sorted(df_pulses["Year"].unique()) # Steps for each unique year within the selected decade
                 ],
                 "active": 0, # Start at the first year
                 "transition": {"duration": 0},
@@ -299,12 +305,12 @@ if selected_state_map != "None":
             st.warning(f"No district data found for {selected_state_map}. Please check state name consistency.")
         else:
             # Get historical data for the selected state from the main df_pulses DataFrame
-            state_historical_df = df_pulses[
+            state_historical_df = df_pulses[ # Uses the already filtered df_pulses
                 df_pulses["State"].str.upper().str.replace(" ", "") == normalized_selected_state
             ].copy()
 
             if state_historical_df.empty:
-                st.warning(f"No pulse data available for {selected_state_map} for {season} - {pulse_type} - {metric} over time.")
+                st.warning(f"No pulse data available for {selected_state_map} for {season} - {pulse_type} - {metric} over time within the selected decade.")
             else:
                 # Prepare a list to store data for animated district map (for all years)
                 animated_state_district_data = []
