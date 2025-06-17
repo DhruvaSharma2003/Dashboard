@@ -132,8 +132,8 @@ def load_india_districts_shapefile():
         gdf = gdf.set_crs(epsg=4326, inplace=False)
         gdf["ST_NM"] = gdf["ST_NM"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper()
         # Apply simplification to district geometries
-        # A slightly smaller tolerance than states might be desired for more detail at district level
-        gdf['geometry'] = gdf['geometry'].simplify(tolerance=0.002, preserve_topology=True)
+        # Increased tolerance to 0.005 for more aggressive simplification to address MessageSizeError
+        gdf['geometry'] = gdf['geometry'].simplify(tolerance=0.005, preserve_topology=True)
         st.info(f"Successfully loaded {len(gdf)} district geometries from '{path}' (simplified).")
         st.info(f"Sample District shapefile state names: {sorted(gdf['ST_NM'].unique().tolist())[:5]}...")
         return gdf
@@ -480,7 +480,7 @@ else:
 
 # ---------- FULL INDIA DISTRICT MAP ----------
 st.markdown("---")
-st.subheader("🇮🇳 Full India District Map View (Fabricated Values)")
+st.subheader("�🇳 Full India District Map View (Fabricated Values)")
 
 # This section needs `data_loaded_successfully` and also assumes `gdf_districts` is properly loaded.
 if data_loaded_successfully and not df_pulses.empty and "Year" in df_pulses.columns and metric in df_pulses.columns and "State" in df_pulses.columns and gdf_districts is not None and not gdf_districts.empty:
@@ -652,3 +652,4 @@ if selected_district_for_line_plot:
     st.plotly_chart(fig_district_trend_simulated, use_container_width=True)
 else:
     st.info("Please select a state to view district-wise trend simulation.")
+�
