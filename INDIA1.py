@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import json
 import numpy as np
 import geopandas as gpd
+import sys # Import sys for object size checking
 
 # Page setup
 st.set_page_config(layout="wide", page_title="India FoodCrop Dashboard", page_icon="🌾")
@@ -90,14 +91,14 @@ pulse_units = {
 }
 
 # Global flags for data loading success
-# Initialize as True, set to False if any critical error occurs
 data_loaded_successfully = True
 
-# --- Cached GeoJSON loading functions ---
+# --- Cached GeoDataFrame loading functions ---
 @st.cache_data
 def load_india_states_gdf(path="India_Shapefile/india_st.shp"):
     """
     Loads India states shapefile, normalizes state names, and returns a GeoDataFrame.
+    Applies geometry simplification.
     """
     if not os.path.exists(path):
         st.error(f"Error: India states shapefile not found at '{path}'. Please ensure the file exists.")
@@ -105,7 +106,11 @@ def load_india_states_gdf(path="India_Shapefile/india_st.shp"):
     try:
         gdf = gpd.read_file(path)
         gdf["State_Name"] = gdf["State_Name"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper()
-        st.info(f"Successfully loaded {len(gdf)} state geometries from '{path}'.")
+        # Apply simplification to state geometries
+        # Tolerance value chosen to balance detail and file size (adjust as needed)
+        # Larger tolerance means more simplification (smaller file, less detail)
+        gdf['geometry'] = gdf['geometry'].simplify(tolerance=0.005, preserve_topology=True)
+        st.info(f"Successfully loaded {len(gdf)} state geometries from '{path}' (simplified).")
         st.info(f"Sample GeoDataFrame state names: {sorted(gdf['State_Name'].unique().tolist())[:5]}...")
         return gdf
     except Exception as e:
@@ -116,7 +121,7 @@ def load_india_states_gdf(path="India_Shapefile/india_st.shp"):
 def load_india_districts_shapefile():
     """
     Loads India districts shapefile, normalizes state names within it,
-    and returns a GeoDataFrame.
+    and returns a GeoDataFrame. Applies geometry simplification.
     """
     path = "India_Shapefile/State/2011_Dist.shp"
     if not os.path.exists(path):
@@ -126,7 +131,10 @@ def load_india_districts_shapefile():
         gdf = gpd.read_file(path)
         gdf = gdf.set_crs(epsg=4326, inplace=False)
         gdf["ST_NM"] = gdf["ST_NM"].str.strip().replace(STATE_NAME_CORRECTIONS).str.upper()
-        st.info(f"Successfully loaded {len(gdf)} district geometries from '{path}'.")
+        # Apply simplification to district geometries
+        # A slightly smaller tolerance than states might be desired for more detail at district level
+        gdf['geometry'] = gdf['geometry'].simplify(tolerance=0.002, preserve_topology=True)
+        st.info(f"Successfully loaded {len(gdf)} district geometries from '{path}' (simplified).")
         st.info(f"Sample District shapefile state names: {sorted(gdf['ST_NM'].unique().tolist())[:5]}...")
         return gdf
     except Exception as e:
@@ -134,7 +142,7 @@ def load_india_districts_shapefile():
         return None
 
 # Load GeoDataFrame for states and districts once
-india_states_gdf = load_india_states_gdf() # Load as GeoDataFrame, not GeoJSON dict
+india_states_gdf = load_india_states_gdf()
 gdf_districts = load_india_districts_shapefile()
 
 # Check if GeoDataFrame data loaded successfully
@@ -459,7 +467,7 @@ if data_loaded_successfully and selected_state_map != "None" and state_col and d
                     sliders=[{'currentvalue': {'prefix': 'Year: '}, 'pad': {'t': 20}}],
                     updatemenus=[{'type': 'buttons', 'showactive': False, 'x': 0.05, 'y': -0.15,
                                   'buttons': [{'label': 'Play', 'method': 'animate', 'args': [None, {'frame': {'duration': 100, 'redraw': True}, 'fromcurrent': True, 'transition': {'duration': 0}}]},
-                                              {'label': 'Pause', 'method': 'animate', 'args': [[None], {'frame': {'duration': 50, 'redraw': False}, 'mode': 'immediate', 'transition': {'duration': 0}}]}]}]
+                                              {'label': 'Pause', 'method': 'animate', "args": [[None], {'frame': {'duration': 50, 'redraw': False}, 'mode': 'immediate', 'transition': {'duration': 0}}]}]}]
                 )
                 fig_state_trend.update_layout({'sliders': [{'currentvalue': {'prefix': 'Year: '}, 'pad': {'t': 20}}]})
                 st.plotly_chart(fig_state_trend, use_container_width=True)
@@ -474,30 +482,25 @@ else:
 st.markdown("---")
 st.subheader("🇮🇳 Full India District Map View (Fabricated Values)")
 
-animated_full_india_district_data = []
-
+# This section needs `data_loaded_successfully` and also assumes `gdf_districts` is properly loaded.
 if data_loaded_successfully and not df_pulses.empty and "Year" in df_pulses.columns and metric in df_pulses.columns and "State" in df_pulses.columns and gdf_districts is not None and not gdf_districts.empty:
     all_years_for_full_map = sorted(df_pulses["Year"].unique())
     st.info(f"Years for Full India District Map: {all_years_for_full_map}")
 
     # Create a base DataFrame to hold all fabricated district data for all years in the decade
-    # This will be merged with gdf_districts later
     all_fabricated_district_data = []
+
+    # Check for critical columns in gdf_districts before loop
+    if not (district_col in gdf_districts.columns and state_col in gdf_districts.columns):
+        st.error(f"Missing expected columns ('{district_col}' or '{state_col}') in gdf_districts for full map processing. Cannot generate map.")
+        all_years_for_full_map = [] # Prevent loop from running
 
     for year in all_years_for_full_map:
         df_current_year_states = df_pulses[df_pulses["Year"] == year].copy()
         st.info(f"Processing Year: {year} for Full India District Map. States with data: {len(df_current_year_states)}")
 
-        # Get all unique districts from the master gdf_districts
-        if district_col in gdf_districts.columns:
-            all_districts = gdf_districts[district_col].dropna().unique().tolist()
-        else:
-            st.error(f"Missing expected column '{district_col}' in gdf_districts for full map district processing.")
-            all_districts = []
-            break # Exit loop if critical column is missing
-
-        # Initialize dummy values for all districts for the current year
-        year_dummy_data = {d: np.nan for d in all_districts}
+        all_districts = gdf_districts[district_col].dropna().unique().tolist()
+        year_dummy_data = {d: np.nan for d in all_districts} # Initialize with NaN
 
         for index, row in df_current_year_states.iterrows():
             state_name_from_data = row["State"]
@@ -505,15 +508,9 @@ if data_loaded_successfully and not df_pulses.empty and "Year" in df_pulses.colu
 
             normalized_state_name_data = state_name_from_data.upper().replace(" ", "")
 
-            # Get districts belonging to the current state from the master gdf_districts
-            if state_col in gdf_districts.columns:
-                state_districts = gdf_districts[
-                    gdf_districts[state_col].str.upper().str.replace(" ", "") == normalized_state_name_data
-                ][district_col].dropna().unique().tolist()
-            else:
-                st.error(f"Missing expected column '{state_col}' in gdf_districts for state-specific district filtering.")
-                state_districts = []
-                continue
+            state_districts = gdf_districts[
+                gdf_districts[state_col].str.upper().str.replace(" ", "") == normalized_state_name_data
+            ][district_col].dropna().unique().tolist()
 
             n_districts = len(state_districts)
 
@@ -524,7 +521,6 @@ if data_loaded_successfully and not df_pulses.empty and "Year" in df_pulses.colu
                 for i, district_name in enumerate(state_districts):
                     year_dummy_data[district_name] = dummy_values[i]
         
-        # Convert year_dummy_data to a DataFrame for the current year
         df_year_fabricated = pd.DataFrame({
             district_col: list(year_dummy_data.keys()),
             "Dummy_Value": list(year_dummy_data.values()),
@@ -533,22 +529,23 @@ if data_loaded_successfully and not df_pulses.empty and "Year" in df_pulses.colu
         all_fabricated_district_data.append(df_year_fabricated)
 
     if all_fabricated_district_data:
-        # Concatenate all fabricated data for all years
         combined_fabricated_data_df = pd.concat(all_fabricated_district_data, ignore_index=True)
         st.info(f"Combined fabricated data (DataFrame) rows: {len(combined_fabricated_data_df)}")
         st.info(f"Sample combined_fabricated_data_df head:\n{combined_fabricated_data_df.head().to_string()}")
 
-        # Merge the master gdf_districts (geometries) with the combined fabricated data
-        # This will create a GeoDataFrame that contains all geometries and all-year fabricated data
         animated_full_india_districts_gdf = gdf_districts.merge(
             combined_fabricated_data_df,
-            on=district_col, # Merge on the district name column
+            on=district_col,
             how="left"
         )
         st.info(f"Final animated_full_india_districts_gdf rows after merge: {len(animated_full_india_districts_gdf)}")
         st.info(f"Sample final animated_full_india_districts_gdf head:\n{animated_full_india_districts_gdf.head().to_string()}")
 
-        # Create the animated full India district map
+        # Check size of the GeoDataFrame before plotting
+        geo_df_size_mb = sys.getsizeof(animated_full_india_districts_gdf) / (1024 * 1024)
+        st.info(f"Size of animated_full_india_districts_gdf before plotting: {geo_df_size_mb:.2f} MB")
+
+
         fig_full_india_districts = px.choropleth(
             animated_full_india_districts_gdf,
             geojson=animated_full_india_districts_gdf.geometry.__geo_interface__, # Pass geometry interface
