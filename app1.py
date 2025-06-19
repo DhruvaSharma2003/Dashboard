@@ -9,7 +9,7 @@ import time
 st.set_page_config(layout="wide", page_title="India Pulses Data Dashboard", page_icon="🌾")
 
 # --- Constants ---
-DATA_DIR = "data"
+DATA_DIR = "Data"
 GEOJSON_URL = "https://raw.githubusercontent.com/geohacker/india/master/state/india_state.geojson"
 
 # List of all pulse data files (ensure these match your uploaded file names exactly)
